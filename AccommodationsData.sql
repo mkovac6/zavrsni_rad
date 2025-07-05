@@ -1,4 +1,14 @@
-﻿-- Create the database
+﻿USE master;
+GO
+
+IF EXISTS (SELECT name FROM sys.databases WHERE name = 'Accommodation')
+BEGIN
+    ALTER DATABASE Accommodation SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE Accommodation;
+END
+GO
+
+-- Create the database
 CREATE DATABASE Accommodation;
 GO
 

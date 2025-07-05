@@ -13,8 +13,11 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Login.route
+        startDestination = Screen.DatabaseTest.route // Temporary for testing
     ) {
+        composable(Screen.DatabaseTest.route) {
+            DatabaseTestScreen()
+        }
         composable(Screen.Login.route) {
             LoginScreen(
                 onNavigateToRegister = {
@@ -27,7 +30,7 @@ fun AppNavigation(
                 }
             )
         }
-        
+
         composable(Screen.Register.route) {
             RegisterScreen(
                 onNavigateToLogin = {
@@ -38,7 +41,7 @@ fun AppNavigation(
                 }
             )
         }
-        
+
         composable(Screen.UniversitySelection.route) {
             UniversitySelectionScreen(
                 onUniversitySelected = {
@@ -49,7 +52,7 @@ fun AppNavigation(
                 }
             )
         }
-        
+
         composable(Screen.ProfileCompletion.route) {
             ProfileCompletionScreen(
                 onProfileComplete = {
@@ -59,7 +62,7 @@ fun AppNavigation(
                 }
             )
         }
-        
+
         composable(Screen.Home.route) {
             HomeScreen(
                 onPropertyClick = {
@@ -76,7 +79,7 @@ fun AppNavigation(
                 }
             )
         }
-        
+
         composable(Screen.PropertyDetail.route) {
             PropertyDetailScreen(
                 onNavigateBack = {
@@ -91,6 +94,7 @@ fun AppNavigation(
 }
 
 sealed class Screen(val route: String) {
+    object DatabaseTest : Screen("database_test") // Temporary
     object Login : Screen("login")
     object Register : Screen("register")
     object UniversitySelection : Screen("university_selection")

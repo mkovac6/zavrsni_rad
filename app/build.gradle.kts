@@ -39,6 +39,15 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/INDEX.LIST"
+            excludes += "/META-INF/DEPENDENCIES"
+        }
+    }
+
 }
 
 dependencies {
@@ -64,7 +73,7 @@ dependencies {
     implementation(libs.maps.compose)
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
-    implementation(libs.mssql.jdbc)
+    implementation(libs.jtds)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
