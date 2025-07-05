@@ -13,7 +13,7 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.DatabaseTest.route // Temporary for testing
+        startDestination = Screen.Login.route // Temporary for testing
     ) {
         composable(Screen.DatabaseTest.route) {
             DatabaseTestScreen()
