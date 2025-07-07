@@ -26,3 +26,9 @@ data class LandlordWithUser(
     val rating: Double,
     val propertyCount: Int
 )
+
+data class Amenity(
+    val amenityId: Int,
+    val name: String,
+    val category: String?
+)

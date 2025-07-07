@@ -148,7 +148,7 @@ fun AppNavigation(
                     navController.popBackStack()
                 },
                 onAddStudent = {
-                    // TODO: Navigate to add student screen
+                    navController.navigate(Screen.AdminAddStudent.route)
                 }
             )
         }
@@ -159,7 +159,7 @@ fun AppNavigation(
                     navController.popBackStack()
                 },
                 onAddLandlord = {
-                    // TODO: Navigate to add landlord screen
+                    navController.navigate(Screen.AddLandlord.route)
                 }
             )
         }
@@ -170,7 +170,7 @@ fun AppNavigation(
                     navController.popBackStack()
                 },
                 onAddProperty = {
-                    // TODO: Navigate to add property screen
+                    navController.navigate(Screen.AddProperty.route)
                 },
                 onPropertyClick = { propertyId ->
                     navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
@@ -181,6 +181,41 @@ fun AppNavigation(
         composable(Screen.AdminUniversities.route) {
             AdminUniversityListScreen(
                 onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        // Admin Add Screens
+        composable(Screen.AdminAddStudent.route) {
+            RegisterScreen(
+                onNavigateToLogin = {
+                    navController.popBackStack()
+                },
+                onNavigateToUniversitySelection = {
+                    navController.navigate(Screen.UniversitySelection.route)
+                },
+                isAdminCreating = true
+            )
+        }
+
+        composable(Screen.AddLandlord.route) {
+            AddLandlordScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onLandlordAdded = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.AddProperty.route) {
+            AddPropertyScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onPropertyAdded = {
                     navController.popBackStack()
                 }
             )
@@ -206,4 +241,9 @@ sealed class Screen(val route: String) {
     object AdminLandlords : Screen("admin_landlords")
     object AdminProperties : Screen("admin_properties")
     object AdminUniversities : Screen("admin_universities")
+
+    // Admin Add screens
+    object AdminAddStudent : Screen("admin_add_student")
+    object AddLandlord : Screen("add_landlord")
+    object AddProperty : Screen("add_property")
 }

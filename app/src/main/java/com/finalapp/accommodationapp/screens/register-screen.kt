@@ -19,7 +19,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun RegisterScreen(
     onNavigateToLogin: () -> Unit,
-    onNavigateToUniversitySelection: () -> Unit
+    onNavigateToUniversitySelection: () -> Unit,
+    isAdminCreating: Boolean = false
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
