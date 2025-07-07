@@ -1,258 +1,410 @@
 package com.finalapp.accommodationapp.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import com.finalapp.accommodationapp.data.repository.PropertyRepository
+import com.finalapp.accommodationapp.data.model.Property
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PropertyDetailScreen(
+    propertyId: Int,
     onNavigateBack: () -> Unit,
     onBookingClick: () -> Unit
 ) {
-    var isFavorite by remember { mutableStateOf(false) }
-    
+    val propertyRepository = remember { PropertyRepository() }
+    var property by remember { mutableStateOf<Property?>(null) }
+    var amenities by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // Load property details and amenities
+    LaunchedEffect(propertyId) {
+        scope.launch {
+            isLoading = true
+            errorMessage = null
+
+            try {
+                // Load property details
+                val loadedProperty = propertyRepository.getPropertyById(propertyId)
+                if (loadedProperty != null) {
+                    property = loadedProperty
+                    // Load amenities
+                    amenities = propertyRepository.getPropertyAmenities(propertyId)
+                } else {
+                    errorMessage = "Property not found"
+                }
+            } catch (e: Exception) {
+                errorMessage = "Error loading property: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Property Details") },
                 navigationIcon = {
-                    IconButton(onClick = { onNavigateBack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { isFavorite = !isFavorite }) {
-                        Icon(
-                            if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                        )
+                    IconButton(onClick = { /* TODO: Add to favorites */ }) {
+                        Icon(Icons.Filled.FavoriteBorder, contentDescription = "Add to favorites")
                     }
                 }
             )
         },
         bottomBar = {
-            Surface(
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "€450/month",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Available from Aug 1",
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    
-                    Button(onClick = { onBookingClick() }) {
-                        Text("Book Now")
+            property?.let { prop ->
+                BottomAppBar {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "€${prop.pricePerMonth.toInt()}/month",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            prop.availableFrom?.let { date ->
+                                val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                                Text(
+                                    text = "Available from ${dateFormat.format(date)}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        Button(
+                            onClick = onBookingClick,
+                            modifier = Modifier.height(48.dp)
+                        ) {
+                            Text("Book Now")
+                        }
                     }
                 }
             }
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Image placeholder
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(250.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Property Images")
+        when {
+            isLoading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
-            
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "Modern Studio Apartment Near University",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+            errorMessage != null -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Default.LocationOn,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "Ilica 123, Zagreb",
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Property Info Cards
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    InfoCard(
-                        icon = Icons.Default.Home,
-                        label = "Type",
-                        value = "Studio",
-                        modifier = Modifier.weight(1f)
-                    )
-                    InfoCard(
-                        icon = Icons.Default.Person,
-                        label = "Capacity",
-                        value = "1 person",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    InfoCard(
-                        icon = Icons.Default.DateRange,
-                        label = "Bedroom",
-                        value = "1",
-                        modifier = Modifier.weight(1f)
-                    )
-                    InfoCard(
-                        icon = Icons.Default.DateRange,
-                        label = "Bathroom",
-                        value = "1",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                // Description
-                Text(
-                    text = "Description",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Text(
-                    text = "Fully furnished studio apartment, 5 minutes walk from University of Zagreb. Perfect for students! The apartment features modern amenities and is located in a quiet neighborhood with easy access to public transportation.",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                // Amenities
-                Text(
-                    text = "Amenities",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                val amenities = listOf("WiFi", "Kitchen", "Furnished", "Heating", "Air Conditioning")
-                amenities.forEach { amenity ->
-                    Row(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            Icons.Default.Check,
+                            Icons.Filled.Warning,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.error
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = amenity,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(start = 8.dp)
+                            text = errorMessage ?: "Unknown error",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = onNavigateBack) {
+                            Text("Go Back")
+                        }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                // Landlord Info
-                Text(
-                    text = "Landlord",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Card(
-                    modifier = Modifier.fillMaxWidth()
+            }
+            property != null -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.AccountCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        
-                        Column(
-                            modifier = Modifier.padding(start = 16.dp)
+                    // Property Title and Type
+                    item {
+                        Column {
+                            Text(
+                                text = property!!.title,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            AssistChip(
+                                onClick = { },
+                                label = { Text(property!!.propertyType.capitalize()) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.Home,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            )
+                        }
+                    }
+
+                    // Location
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                            )
                         ) {
-                            Text(
-                                text = "Marko Novak",
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "Verified Landlord",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
                             Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    Icons.Default.Star,
+                                    Icons.Filled.LocationOn,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
-                                Text(
-                                    text = "4.5 rating",
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.padding(start = 4.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = property!!.address,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "${property!!.city} ${property!!.postalCode}",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Key Features
+                    item {
+                        Text(
+                            text = "Key Features",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            FeatureChip(
+                                icon = Icons.Filled.Person,
+                                label = "${property!!.bedrooms} Bedroom${if (property!!.bedrooms > 1) "s" else ""}"
+                            )
+                            FeatureChip(
+                                icon = Icons.Filled.Person,
+                                label = "${property!!.bathrooms} Bathroom${if (property!!.bathrooms > 1) "s" else ""}"
+                            )
+                            FeatureChip(
+                                icon = Icons.Filled.Person,
+                                label = "${property!!.totalCapacity} People"
+                            )
+                        }
+                    }
+
+                    // Description
+                    if (property!!.description.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Description",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = property!!.description,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+
+                    // Amenities
+                    if (amenities.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Amenities",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        item {
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                amenities.forEach { amenity ->
+                                    AssistChip(
+                                        onClick = { },
+                                        label = { Text(amenity) },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Filled.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Landlord Information
+                    item {
+                        Text(
+                            text = "Landlord Information",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.Person,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = property!!.landlordName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    property!!.companyName?.let {
+                                        Text(
+                                            text = it,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Filled.Phone,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = property!!.landlordPhone,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                    if (property!!.landlordRating > 0) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Filled.Star,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = Color(0xFFFFC107)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "${property!!.landlordRating}/5.0",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Availability dates
+                    item {
+                        Text(
+                            text = "Availability",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            val dateFormat = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                            ) {
+                                property!!.availableFrom?.let { date ->
+                                    Row {
+                                        Text(
+                                            text = "Available from: ",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = dateFormat.format(date),
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                                property!!.availableTo?.let { date ->
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row {
+                                        Text(
+                                            text = "Available until: ",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = dateFormat.format(date),
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -263,36 +415,40 @@ fun PropertyDetailScreen(
 }
 
 @Composable
-fun InfoCard(
+fun FeatureChip(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
+    label: String
 ) {
-    Card(
-        modifier = modifier
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp)
-            )
-            Text(
-                text = label,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+fun FlowRow(
+    modifier: Modifier = Modifier,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    content: @Composable () -> Unit
+) {
+    // Simple implementation of FlowRow
+    // In production, you'd use the actual FlowRow from accompanist or similar
+    Row(
+        modifier = modifier,
+        horizontalArrangement = horizontalArrangement
+    ) {
+        content()
     }
 }

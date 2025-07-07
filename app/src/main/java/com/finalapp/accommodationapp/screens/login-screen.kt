@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(
     onNavigateToRegister: () -> Unit,
-    onLoginSuccess: () -> Unit
+    onLoginSuccess: (String) -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -144,7 +144,7 @@ fun LoginScreen(
 
                                 // Small delay to show the success message
                                 kotlinx.coroutines.delay(1000)
-                                onLoginSuccess()
+                                onLoginSuccess(user.userType)
                             } else {
                                 errorMessage = "Invalid email or password"
                                 snackbarHostState.showSnackbar(

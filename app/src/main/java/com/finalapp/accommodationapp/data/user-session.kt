@@ -5,7 +5,7 @@ import com.finalapp.accommodationapp.data.model.User
 // Simple in-memory session storage
 // In production, use SharedPreferences or DataStore
 object UserSession {
-    private var currentUser: User? = null
+    var currentUser: User? = null
     
     fun setUser(user: User) {
         currentUser = user

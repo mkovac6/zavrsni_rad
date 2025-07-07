@@ -2,9 +2,11 @@ package com.finalapp.accommodationapp.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.finalapp.accommodationapp.screens.*
 
 @Composable
@@ -13,19 +15,30 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Login.route // Back to login screen
+        startDestination = Screen.Login.route
     ) {
-        // composable(Screen.DatabaseTest.route) {
-        //     DatabaseTestScreen()
-        // }
         composable(Screen.Login.route) {
             LoginScreen(
                 onNavigateToRegister = {
                     navController.navigate(Screen.Register.route)
                 },
-                onLoginSuccess = {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
+                onLoginSuccess = { userType ->
+                    when (userType) {
+                        "admin" -> navController.navigate(Screen.AdminDashboard.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                        "student" -> navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                        "landlord" -> {
+                            // TODO: Navigate to landlord dashboard
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
+                            }
+                        }
+                        else -> navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
                     }
                 }
             )
@@ -45,7 +58,6 @@ fun AppNavigation(
         composable(Screen.UniversitySelection.route) {
             UniversitySelectionScreen(
                 onUniversitySelected = { universityId ->
-                    // Pass university ID to profile completion
                     navController.navigate("${Screen.ProfileCompletion.route}/$universityId")
                 },
                 onNavigateBack = {
@@ -54,8 +66,11 @@ fun AppNavigation(
             )
         }
 
-        composable("${Screen.ProfileCompletion.route}/{universityId}") { backStackEntry ->
-            val universityId = backStackEntry.arguments?.getString("universityId")?.toIntOrNull() ?: 0
+        composable(
+            "${Screen.ProfileCompletion.route}/{universityId}",
+            arguments = listOf(navArgument("universityId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val universityId = backStackEntry.arguments?.getInt("universityId") ?: 0
             ProfileCompletionScreen(
                 universityId = universityId,
                 onProfileComplete = {
@@ -68,23 +83,33 @@ fun AppNavigation(
 
         composable(Screen.Home.route) {
             HomeScreen(
-                onPropertyClick = {
-                    navController.navigate(Screen.PropertyDetail.route)
+                onPropertyClick = { propertyId ->
+                    navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
                 },
-                onNavigateToSearch = {
+                onSearchClick = {
                     // TODO: Navigate to search screen
                 },
-                onNavigateToProfile = {
+                onProfileClick = {
                     // TODO: Navigate to profile screen
                 },
-                onNavigateToFavorites = {
+                onFavoritesClick = {
                     // TODO: Navigate to favorites screen
+                },
+                onLogout = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             )
         }
 
-        composable(Screen.PropertyDetail.route) {
+        composable(
+            "${Screen.PropertyDetail.route}/{propertyId}",
+            arguments = listOf(navArgument("propertyId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val propertyId = backStackEntry.arguments?.getInt("propertyId") ?: 0
             PropertyDetailScreen(
+                propertyId = propertyId,
                 onNavigateBack = {
                     navController.popBackStack()
                 },
@@ -93,11 +118,77 @@ fun AppNavigation(
                 }
             )
         }
+
+        // Admin Routes
+        composable(Screen.AdminDashboard.route) {
+            AdminDashboardScreen(
+                onStudentsClick = {
+                    navController.navigate(Screen.AdminStudents.route)
+                },
+                onLandlordsClick = {
+                    navController.navigate(Screen.AdminLandlords.route)
+                },
+                onPropertiesClick = {
+                    navController.navigate(Screen.AdminProperties.route)
+                },
+                onUniversitiesClick = {
+                    navController.navigate(Screen.AdminUniversities.route)
+                },
+                onLogout = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.AdminStudents.route) {
+            AdminStudentListScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onAddStudent = {
+                    // TODO: Navigate to add student screen
+                }
+            )
+        }
+
+        composable(Screen.AdminLandlords.route) {
+            AdminLandlordListScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onAddLandlord = {
+                    // TODO: Navigate to add landlord screen
+                }
+            )
+        }
+
+        composable(Screen.AdminProperties.route) {
+            AdminPropertyListScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onAddProperty = {
+                    // TODO: Navigate to add property screen
+                },
+                onPropertyClick = { propertyId ->
+                    navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
+                }
+            )
+        }
+
+        composable(Screen.AdminUniversities.route) {
+            AdminUniversityListScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
     }
 }
 
 sealed class Screen(val route: String) {
-    object DatabaseTest : Screen("database_test") // Temporary
     object Login : Screen("login")
     object Register : Screen("register")
     object UniversitySelection : Screen("university_selection")
@@ -108,4 +199,11 @@ sealed class Screen(val route: String) {
     object Profile : Screen("profile")
     object Favorites : Screen("favorites")
     object Booking : Screen("booking")
+
+    // Admin screens
+    object AdminDashboard : Screen("admin_dashboard")
+    object AdminStudents : Screen("admin_students")
+    object AdminLandlords : Screen("admin_landlords")
+    object AdminProperties : Screen("admin_properties")
+    object AdminUniversities : Screen("admin_universities")
 }
