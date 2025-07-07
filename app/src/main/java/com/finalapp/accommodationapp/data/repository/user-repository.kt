@@ -3,6 +3,7 @@ package com.finalapp.accommodationapp.data.repository
 import android.util.Log
 import com.finalapp.accommodationapp.data.DatabaseConnection
 import com.finalapp.accommodationapp.data.model.User
+import com.finalapp.accommodationapp.data.UserSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -44,6 +45,9 @@ class UserRepository {
                     firstName = firstName
                 )
                 Log.d(TAG, "Login successful for: ${user.email}")
+
+                // Save user to session
+                UserSession.setUser(user)
             } else {
                 Log.d(TAG, "Login failed: Invalid credentials")
             }
@@ -95,6 +99,9 @@ class UserRepository {
                         firstName = ""
                     )
                     Log.d(TAG, "Registration successful for: $email")
+
+                    // Save user to session
+                    UserSession.setUser(user)
                 }
                 generatedKeys?.close()
             }

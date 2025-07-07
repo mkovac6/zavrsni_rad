@@ -13,11 +13,11 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Login.route // Temporary for testing
+        startDestination = Screen.Login.route // Back to login screen
     ) {
-        composable(Screen.DatabaseTest.route) {
-            DatabaseTestScreen()
-        }
+        // composable(Screen.DatabaseTest.route) {
+        //     DatabaseTestScreen()
+        // }
         composable(Screen.Login.route) {
             LoginScreen(
                 onNavigateToRegister = {
@@ -44,8 +44,9 @@ fun AppNavigation(
 
         composable(Screen.UniversitySelection.route) {
             UniversitySelectionScreen(
-                onUniversitySelected = {
-                    navController.navigate(Screen.ProfileCompletion.route)
+                onUniversitySelected = { universityId ->
+                    // Pass university ID to profile completion
+                    navController.navigate("${Screen.ProfileCompletion.route}/$universityId")
                 },
                 onNavigateBack = {
                     navController.popBackStack()
@@ -53,8 +54,10 @@ fun AppNavigation(
             )
         }
 
-        composable(Screen.ProfileCompletion.route) {
+        composable("${Screen.ProfileCompletion.route}/{universityId}") { backStackEntry ->
+            val universityId = backStackEntry.arguments?.getString("universityId")?.toIntOrNull() ?: 0
             ProfileCompletionScreen(
+                universityId = universityId,
                 onProfileComplete = {
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
