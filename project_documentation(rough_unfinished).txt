@@ -1,0 +1,347 @@
+ACCOMMODATION APP - PROJECT DOCUMENTATION
+=========================================
+
+PROJECT OVERVIEW
+----------------
+This is a comprehensive accommodation management system for students and landlords, built with Kotlin and Jetpack Compose for Android. The app connects to a SQL Server database and supports three user types: Students, Landlords, and Administrators.
+
+ARCHITECTURE
+------------
+The project follows MVVM architecture with clear separation of concerns:
+- UI Layer: Jetpack Compose screens
+- Data Layer: Repositories and Models
+- Database: SQL Server with jTDS driver
+
+USER TYPES & FLOWS
+------------------
+1. STUDENTS
+   - Can browse active properties
+   - Register with university selection
+   - Complete profile with preferences
+   - View property details
+   - (Future: Book properties, add favorites)
+
+2. LANDLORDS
+   - Manage their own properties
+   - Add/Edit/Delete properties
+   - Toggle property active/inactive status
+   - View property statistics
+
+3. ADMINISTRATORS
+   - Full CRUD operations on all entities
+   - Manage students, landlords, properties, universities
+   - View all data with delete capabilities
+
+DATA LAYER STRUCTURE
+====================
+
+DATABASE CONNECTION
+-------------------
+File: data/database-connection.kt
+- Manages SQL Server connections using jTDS driver
+- Implements connection pooling
+- Handles connection errors gracefully
+- Methods:
+  - getConnection(): Establishes database connection
+  - testConnection(): Verifies database connectivity
+
+File: data/database-config.kt
+- Stores database configuration
+- Connection string for jTDS
+- Server, database name, credentials
+
+USER SESSION
+------------
+File: data/user-session.kt
+- Singleton object storing current logged-in user
+- Maintains user state across screens
+- Used for authorization checks
+
+MODELS
+======
+
+USER MODELS
+-----------
+File: data/model/user-model.kt
+- User: Basic user entity with email, password, user type
+- Fields: userId, email, userType, isProfileComplete
+
+File: data/model/student/student-profile-model.kt
+- StudentProfile: Extended profile for students
+- Links to User and University
+- Contains preferences, budget, study details
+
+File: data/model/landlord/landlord-model.kt
+- Landlord: Extended profile for landlords
+- Contains company info, verification status, rating
+- Links to User entity
+
+PROPERTY MODELS
+---------------
+File: data/model/property-model.kt
+- Property: Main accommodation entity
+- Contains all property details (rooms, price, location)
+- Links to Landlord
+- Includes availability dates and active status
+
+ADMIN MODELS
+------------
+File: data/model/admin/admin-data-models.kt
+- StudentWithUser: Join model for admin views
+- LandlordWithUser: Join model showing user + landlord data
+- Amenity: Property features (WiFi, parking, etc.)
+
+OTHER MODELS
+------------
+File: data/model/university-model.kt
+- University: Educational institutions
+- Used in student registration flow
+
+REPOSITORIES
+============
+
+USER REPOSITORY
+---------------
+File: data/repository/user-repository.kt
+Purpose: Handles user authentication and registration
+Key Methods:
+- login(email, password): Authenticates users
+- register(email, password, userType): Creates new users
+- getUserByEmail(email): Retrieves user by email
+- updateUserProfileStatus(userId, isComplete): Updates profile completion
+
+PROPERTY REPOSITORY
+-------------------
+File: data/repository/property-repository.kt
+Purpose: Manages property CRUD operations
+Key Methods:
+- getAllProperties(): Fetches active properties for students
+- getPropertiesByLandlordId(landlordId): Landlord's properties
+- getPropertyById(propertyId): Single property details
+- updateProperty(...): Updates property information
+- deleteProperty(propertyId): Cascading delete with related data
+- updatePropertyStatus(propertyId, isActive): Toggle active state
+- getPropertyAmenities(propertyId): Property features
+- updatePropertyAmenities(propertyId, amenityIds): Update features
+
+STUDENT REPOSITORY
+------------------
+File: data/repository/student/student-repository.kt
+Purpose: Manages student profiles
+Key Methods:
+- createStudentProfile(...): Creates complete student profile
+- getStudentByUserId(userId): Retrieves student data
+- Updates profile completion status
+
+LANDLORD REPOSITORY
+-------------------
+File: data/repository/landlord/landlord-repository.kt
+Purpose: Manages landlord operations
+Key Methods:
+- getLandlordByUserId(userId): Get landlord by user ID
+- createLandlordProfile(...): Creates landlord profile
+- getLandlordStatistics(landlordId): Property count and stats
+
+ADMIN REPOSITORY
+----------------
+File: data/repository/admin/admin-repository.kt
+Purpose: Administrative operations for all entities
+Key Methods:
+- getAllStudentsWithUsers(): Student list with user data
+- getAllLandlordsWithUsers(): Landlord list with user data
+- deleteStudent/Landlord/Property(): Cascading deletes
+- createProperty(...): Admin property creation
+- addPropertyAmenities(...): Link amenities to properties
+- getAllAmenities(): Retrieve all available amenities
+
+UNIVERSITY REPOSITORY
+---------------------
+File: data/repository/university-repository.kt
+Purpose: Manages university data
+Key Methods:
+- getAllUniversities(): List of active universities
+- Used primarily in registration flow
+
+SCREENS
+=======
+
+AUTHENTICATION SCREENS
+----------------------
+File: screens/auth/login-screen.kt
+- Email/password login
+- Quick login buttons for development
+- Navigation to appropriate dashboard by user type
+- Form validation and error handling
+
+File: screens/auth/register-screen.kt
+- User type selection (Student/Landlord)
+- Email/password registration
+- Validates unique email
+- Routes to appropriate profile completion
+
+STUDENT SCREENS
+---------------
+File: screens/student/home-screen.kt
+- Browse all active properties
+- Search functionality (to be implemented)
+- Property cards with key information
+- Navigation to property details
+
+File: screens/student/university-selection-screen.kt
+- List of universities from database
+- Part of registration flow
+- Passes selected university to profile completion
+
+File: screens/student/profile-completion-screen.kt
+- Complete student profile after registration
+- Personal details, study info, preferences
+- Updates profile completion status
+
+LANDLORD SCREENS
+----------------
+File: screens/landlord/landlord-home-screen.kt
+- Dashboard showing owned properties
+- Statistics (total properties, active count)
+- Property management with edit buttons
+- Active/Inactive toggle with warnings
+- Add property FAB
+
+File: screens/landlord/landlord-add-property-screen.kt
+- Create new properties
+- Form with all property details
+- Amenity selection
+- Date picker for availability
+- Handles past date warnings (creates as inactive)
+
+File: screens/landlord/landlord-edit-property-screen.kt
+- Edit existing properties
+- Pre-populated with current data
+- Update all fields including amenities
+- Delete property with confirmation
+- Date picker integration
+
+File: screens/landlord/landlord-profile-completion-screen.kt
+- Complete landlord profile after registration
+- Company information, phone number
+- Creates landlord record in database
+
+SHARED SCREENS
+--------------
+File: screens/property-detail-screen.kt
+- Detailed property view
+- Conditional UI based on user type:
+  - Students: See booking button, landlord info
+  - Landlords: See edit button if owner
+- Amenities display
+- Availability dates
+- Contact information
+
+ADMIN SCREENS
+-------------
+File: screens/admin/admin-dashboard-screen.kt
+- Main admin panel with navigation
+- Four sections: Students, Landlords, Properties, Universities
+- Logout functionality
+
+File: screens/admin/admin-student-list-screen.kt
+- List all registered students
+- Shows university and profile status
+- Delete functionality with confirmation
+- Add new student button
+
+File: screens/admin/admin-landlord-list-screen.kt
+- List all landlords with verification status
+- Property count display
+- Delete cascades to properties
+- Add new landlord navigation
+
+File: screens/admin/admin-property-list-screen.kt
+- All properties with details
+- Delete functionality
+- Navigation to property details
+- Add property option
+
+File: screens/admin/admin-university-list-screen.kt
+- Manage universities
+- Add new universities via dialog
+- Delete only if no enrolled students
+- Search functionality
+
+File: screens/admin/add-landlord-screen.kt
+- Admin creates landlord accounts
+- Full account + profile creation
+- Password setting
+- Verification status control
+
+NAVIGATION
+==========
+File: navigation/navigation.kt
+- Centralized navigation using Jetpack Navigation Compose
+- Sealed class for type-safe routes
+- Conditional navigation based on user type
+- Deep linking support for property details
+- Proper back stack management
+
+KEY FEATURES
+============
+
+1. AUTHENTICATION & AUTHORIZATION
+   - Role-based access control
+   - Session management
+   - Secure password storage (to be hashed)
+
+2. PROPERTY MANAGEMENT
+   - Full CRUD operations
+   - Active/inactive status
+   - Amenity management
+   - Date-based availability
+
+3. USER PROFILES
+   - Multi-step registration
+   - Profile completion tracking
+   - University association for students
+
+4. ADMIN PANEL
+   - Complete system management
+   - Cascading deletes
+   - Data integrity maintenance
+
+5. QUALITY OF LIFE
+   - Date pickers for easy input
+   - Form validation
+   - Error handling with user feedback
+   - Loading states
+   - Confirmation dialogs
+
+FUTURE ENHANCEMENTS
+===================
+1. Implement property booking system
+2. Add favorites functionality for students
+3. Implement messaging between students and landlords
+4. Add property image upload
+5. Implement search and filtering
+6. Add review/rating system
+7. Integrate Google Maps for location
+8. Implement email/phone verification
+9. Add REST API backend instead of direct DB access
+10. Implement proper password hashing
+
+TECHNICAL NOTES
+===============
+- Database: SQL Server with jTDS driver
+- UI: Jetpack Compose with Material 3
+- Architecture: MVVM pattern
+- State Management: Compose State and Coroutines
+- Navigation: Jetpack Navigation Compose
+- Async Operations: Kotlin Coroutines
+- Date Handling: SimpleDateFormat (consider migrating to java.time)
+
+SECURITY CONSIDERATIONS
+=======================
+- Passwords currently stored as plain text (implement hashing)
+- Direct database access from client (move to REST API)
+- SQL injection prevention through prepared statements
+- Input validation on all forms
+- Session management needs improvement
+
+This documentation covers the current state of the AccommodationApp project as of the latest development session.
