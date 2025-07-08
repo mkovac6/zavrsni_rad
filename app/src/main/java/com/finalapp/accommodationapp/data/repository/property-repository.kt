@@ -402,6 +402,30 @@ class PropertyRepository {
         }
     }
 
+    suspend fun getLandlordIdByPropertyId(propertyId: Int): Int? = withContext(Dispatchers.IO) {
+        try {
+            val connection = DatabaseConnection.getConnection()
+            val query = "SELECT landlord_id FROM Properties WHERE property_id = ?"
+
+            val preparedStatement = connection?.prepareStatement(query)
+            preparedStatement?.setInt(1, propertyId)
+            val resultSet = preparedStatement?.executeQuery()
+
+            val landlordId = if (resultSet?.next() == true) {
+                resultSet.getInt("landlord_id")
+            } else null
+
+            resultSet?.close()
+            preparedStatement?.close()
+            connection?.close()
+
+            landlordId
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting landlord ID for property $propertyId", e)
+            null
+        }
+    }
+
     suspend fun getPropertiesByLandlordId(landlordId: Int): List<Property> = withContext(Dispatchers.IO) {
         val properties = mutableListOf<Property>()
 

@@ -14,7 +14,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
+import com.finalapp.accommodationapp.data.repository.LandlordRepository
 import com.finalapp.accommodationapp.data.model.Property
+import com.finalapp.accommodationapp.data.UserSession
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -23,16 +25,19 @@ import java.util.Locale
 fun PropertyDetailScreen(
     propertyId: Int,
     onNavigateBack: () -> Unit,
-    onBookingClick: () -> Unit
+    onBookingClick: () -> Unit,
+    onEditClick: ((Int) -> Unit)? = null  // Add optional edit navigation
 ) {
     val propertyRepository = remember { PropertyRepository() }
+    val landlordRepository = remember { LandlordRepository() }
     var property by remember { mutableStateOf<Property?>(null) }
     var amenities by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isLandlordOwner by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    // Load property details and amenities
+    // Load property details and check ownership
     LaunchedEffect(propertyId) {
         scope.launch {
             isLoading = true
@@ -45,6 +50,17 @@ fun PropertyDetailScreen(
                     property = loadedProperty
                     // Load amenities
                     amenities = propertyRepository.getPropertyAmenitiesAsStrings(propertyId)
+
+                    // Check if current user is the landlord owner
+                    val currentUser = UserSession.currentUser
+                    if (currentUser?.userType == "landlord") {
+                        val landlord = landlordRepository.getLandlordByUserId(currentUser.userId)
+                        if (landlord != null) {
+                            // Get the property's landlord ID
+                            val propertyLandlordId = propertyRepository.getLandlordIdByPropertyId(propertyId)
+                            isLandlordOwner = landlord.landlordId == propertyLandlordId
+                        }
+                    }
                 } else {
                     errorMessage = "Property not found"
                 }
@@ -66,41 +82,58 @@ fun PropertyDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO: Add to favorites */ }) {
-                        Icon(Icons.Filled.FavoriteBorder, contentDescription = "Add to favorites")
+                    // Show edit button if user is the landlord owner
+                    if (isLandlordOwner && onEditClick != null) {
+                        IconButton(onClick = { onEditClick(propertyId) }) {
+                            Icon(
+                                Icons.Filled.Edit,
+                                contentDescription = "Edit Property",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    // Show favorite button for students
+                    if (UserSession.currentUser?.userType == "student") {
+                        IconButton(onClick = { /* TODO: Add to favorites */ }) {
+                            Icon(Icons.Filled.FavoriteBorder, contentDescription = "Add to favorites")
+                        }
                     }
                 }
             )
         },
         bottomBar = {
             property?.let { prop ->
-                BottomAppBar {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "€${prop.pricePerMonth.toInt()}/month",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            prop.availableFrom?.let { date ->
-                                val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                                Text(
-                                    text = "Available from ${dateFormat.format(date)}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                        Button(
-                            onClick = onBookingClick,
-                            modifier = Modifier.height(48.dp)
+                // Only show booking bar for students
+                if (UserSession.currentUser?.userType == "student") {
+                    BottomAppBar {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Book Now")
+                            Column {
+                                Text(
+                                    text = "€${prop.pricePerMonth.toInt()}/month",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                prop.availableFrom?.let { date ->
+                                    val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                                    Text(
+                                        text = "Available from ${dateFormat.format(date)}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = onBookingClick,
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Text("Book Now")
+                            }
                         }
                     }
                 }
@@ -159,23 +192,48 @@ fun PropertyDetailScreen(
                     // Property Title and Type
                     item {
                         Column {
-                            Text(
-                                text = property!!.title,
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            AssistChip(
-                                onClick = { },
-                                label = { Text(property!!.propertyType.capitalize()) },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Filled.Home,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = property!!.title,
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold
                                     )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        AssistChip(
+                                            onClick = { },
+                                            label = { Text(property!!.propertyType.capitalize()) },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Filled.Home,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        )
+                                        // Show active/inactive status for landlords
+                                        if (isLandlordOwner) {
+                                            AssistChip(
+                                                onClick = { },
+                                                label = {
+                                                    Text(if (property!!.isActive) "Active" else "Inactive")
+                                                },
+                                                colors = AssistChipDefaults.assistChipColors(
+                                                    containerColor = if (property!!.isActive)
+                                                        Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                                    else
+                                                        Color(0xFFFF5252).copy(alpha = 0.2f)
+                                                )
+                                            )
+                                        }
+                                    }
                                 }
-                            )
+                            }
                         }
                     }
 
@@ -291,67 +349,69 @@ fun PropertyDetailScreen(
                         }
                     }
 
-                    // Landlord Information
-                    item {
-                        Text(
-                            text = "Landlord Information",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Card(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                    // Landlord Information (only show for students)
+                    if (UserSession.currentUser?.userType == "student") {
+                        item {
+                            Text(
+                                text = "Landlord Information",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(
-                                    Icons.Filled.Person,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = property!!.landlordName,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
-                                    property!!.companyName?.let {
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = it,
-                                            style = MaterialTheme.typography.bodyMedium
+                                            text = property!!.landlordName,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
                                         )
-                                    }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Filled.Phone,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = property!!.landlordPhone,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    }
-                                    if (property!!.landlordRating > 0) {
+                                        property!!.companyName?.let {
+                                            Text(
+                                                text = it,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(
-                                                Icons.Filled.Star,
+                                                Icons.Filled.Phone,
                                                 contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = Color(0xFFFFC107)
+                                                modifier = Modifier.size(16.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = "${property!!.landlordRating}/5.0",
+                                                text = property!!.landlordPhone,
                                                 style = MaterialTheme.typography.bodyMedium
                                             )
+                                        }
+                                        if (property!!.landlordRating > 0) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Filled.Star,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = Color(0xFFFFC107)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "${property!!.landlordRating}/5.0",
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            }
                                         }
                                     }
                                 }

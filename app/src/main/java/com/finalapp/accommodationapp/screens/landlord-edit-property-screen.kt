@@ -1,5 +1,6 @@
 package com.finalapp.accommodationapp.screens
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -61,34 +62,56 @@ fun LandlordEditPropertyScreen(
 
     // Load property data
     LaunchedEffect(propertyId) {
-        isLoading = true
+        try {
+            isLoading = true
+            Log.d("LandlordEditProperty", "Loading property with ID: $propertyId")
 
-        // Load property
-        val loadedProperty = propertyRepository.getPropertyById(propertyId)
-        if (loadedProperty != null) {
-            property = loadedProperty
-            title = loadedProperty.title
-            description = loadedProperty.description
-            propertyType = loadedProperty.propertyType
-            address = loadedProperty.address
-            city = loadedProperty.city
-            postalCode = loadedProperty.postalCode
-            pricePerMonth = loadedProperty.pricePerMonth.toString()
-            bedrooms = loadedProperty.bedrooms.toString()
-            bathrooms = loadedProperty.bathrooms.toString()
-            totalCapacity = loadedProperty.totalCapacity.toString()
-            availableFrom = dateFormat.format(loadedProperty.availableFrom)
-            availableTo = loadedProperty.availableTo?.let { dateFormat.format(it) } ?: ""
+            // Load property
+            val loadedProperty = propertyRepository.getPropertyById(propertyId)
+            Log.d("LandlordEditProperty", "Loaded property: $loadedProperty")
+
+            if (loadedProperty != null) {
+                property = loadedProperty
+                title = loadedProperty.title
+                description = loadedProperty.description
+                propertyType = loadedProperty.propertyType
+                address = loadedProperty.address
+                city = loadedProperty.city
+                postalCode = loadedProperty.postalCode
+                pricePerMonth = loadedProperty.pricePerMonth.toString()
+                bedrooms = loadedProperty.bedrooms.toString()
+                bathrooms = loadedProperty.bathrooms.toString()
+                totalCapacity = loadedProperty.totalCapacity.toString()
+                availableFrom = dateFormat.format(loadedProperty.availableFrom)
+                availableTo = loadedProperty.availableTo?.let { dateFormat.format(it) } ?: ""
+            } else {
+                Log.e("LandlordEditProperty", "Property not found for ID: $propertyId")
+                errorMessage = "Property not found"
+            }
+
+            // Load amenities
+            try {
+                amenities = adminRepository.getAllAmenities()
+                Log.d("LandlordEditProperty", "Loaded ${amenities.size} amenities")
+            } catch (e: Exception) {
+                Log.e("LandlordEditProperty", "Error loading amenities", e)
+            }
+
+            // Load selected amenities
+            try {
+                val propertyAmenityIds = propertyRepository.getPropertyAmenities(propertyId)
+                selectedAmenities = propertyAmenityIds.toSet()
+                Log.d("LandlordEditProperty", "Loaded ${selectedAmenities.size} selected amenities")
+            } catch (e: Exception) {
+                Log.e("LandlordEditProperty", "Error loading property amenities", e)
+            }
+
+            isLoading = false
+        } catch (e: Exception) {
+            Log.e("LandlordEditProperty", "Error in LaunchedEffect", e)
+            errorMessage = "Error loading property: ${e.message}"
+            isLoading = false
         }
-
-        // Load amenities
-        amenities = adminRepository.getAllAmenities()
-
-        // Load selected amenities
-        val propertyAmenityIds = propertyRepository.getPropertyAmenities(propertyId)
-        selectedAmenities = propertyAmenityIds.toSet()
-
-        isLoading = false
     }
 
     Scaffold(

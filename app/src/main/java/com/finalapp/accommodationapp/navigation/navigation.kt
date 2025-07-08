@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.screens.*
 
 @Composable
@@ -17,7 +18,6 @@ fun AppNavigation(
         navController = navController,
         startDestination = Screen.Login.route
     ) {
-// In navigation.kt, update the login success navigation:
         composable(Screen.Login.route) {
             LoginScreen(
                 onNavigateToRegister = {
@@ -107,6 +107,7 @@ fun AppNavigation(
             )
         }
 
+        // Single PropertyDetail route with edit functionality
         composable(
             "${Screen.PropertyDetail.route}/{propertyId}",
             arguments = listOf(navArgument("propertyId") { type = NavType.IntType })
@@ -119,7 +120,12 @@ fun AppNavigation(
                 },
                 onBookingClick = {
                     // TODO: Navigate to booking screen
-                }
+                },
+                onEditClick = if (UserSession.currentUser?.userType == "landlord") {
+                    { id ->
+                        navController.navigate("${Screen.LandlordEditProperty.route}/$id")
+                    }
+                } else null
             )
         }
 
@@ -190,17 +196,18 @@ fun AppNavigation(
             )
         }
 
-        // Admin Add Screens
+        // Landlord Profile Completion
         composable(Screen.LandlordProfileCompletion.route) {
             LandlordProfileCompletionScreen(
                 onProfileComplete = {
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.LandlordHome.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
             )
         }
 
+        // Landlord Home
         composable(Screen.LandlordHome.route) {
             LandlordHomeScreen(
                 onPropertyClick = { propertyId ->
@@ -223,6 +230,7 @@ fun AppNavigation(
             )
         }
 
+        // Landlord Add Property
         composable(Screen.LandlordAddProperty.route) {
             LandlordAddPropertyScreen(
                 onNavigateBack = {
@@ -234,6 +242,29 @@ fun AppNavigation(
             )
         }
 
+        // MISSING ROUTE - Landlord Edit Property
+        composable(
+            "${Screen.LandlordEditProperty.route}/{propertyId}",
+            arguments = listOf(navArgument("propertyId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val propertyId = backStackEntry.arguments?.getInt("propertyId") ?: 0
+            LandlordEditPropertyScreen(
+                propertyId = propertyId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onPropertyUpdated = {
+                    navController.popBackStack()
+                },
+                onPropertyDeleted = {
+                    navController.navigate(Screen.LandlordHome.route) {
+                        popUpTo(Screen.LandlordHome.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // Admin Add Landlord
         composable(Screen.AddLandlord.route) {
             AddLandlordScreen(
                 onNavigateBack = {
@@ -245,6 +276,7 @@ fun AppNavigation(
             )
         }
 
+        // Admin Add Property
         composable(Screen.AddProperty.route) {
             AddPropertyScreen(
                 onNavigateBack = {
