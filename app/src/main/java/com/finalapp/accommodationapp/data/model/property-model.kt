@@ -21,5 +21,6 @@ data class Property(
     val landlordName: String,
     val landlordPhone: String,
     val landlordRating: Double,
-    val companyName: String? = null
+    val companyName: String? = null,
+    val isActive: Boolean = true
 )

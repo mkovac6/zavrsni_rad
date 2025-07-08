@@ -44,7 +44,7 @@ fun PropertyDetailScreen(
                 if (loadedProperty != null) {
                     property = loadedProperty
                     // Load amenities
-                    amenities = propertyRepository.getPropertyAmenities(propertyId)
+                    amenities = propertyRepository.getPropertyAmenitiesAsStrings(propertyId)
                 } else {
                     errorMessage = "Property not found"
                 }

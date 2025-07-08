@@ -17,6 +17,7 @@ fun AppNavigation(
         navController = navController,
         startDestination = Screen.Login.route
     ) {
+// In navigation.kt, update the login success navigation:
         composable(Screen.Login.route) {
             LoginScreen(
                 onNavigateToRegister = {
@@ -27,15 +28,15 @@ fun AppNavigation(
                         "admin" -> navController.navigate(Screen.AdminDashboard.route) {
                             popUpTo(Screen.Login.route) { inclusive = true }
                         }
+
                         "student" -> navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Login.route) { inclusive = true }
                         }
-                        "landlord" -> {
-                            // TODO: Navigate to landlord dashboard
-                            navController.navigate(Screen.Home.route) {
-                                popUpTo(Screen.Login.route) { inclusive = true }
-                            }
+
+                        "landlord" -> navController.navigate(Screen.LandlordHome.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
                         }
+
                         else -> navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Login.route) { inclusive = true }
                         }
@@ -51,6 +52,9 @@ fun AppNavigation(
                 },
                 onNavigateToUniversitySelection = {
                     navController.navigate(Screen.UniversitySelection.route)
+                },
+                onNavigateToLandlordProfile = {
+                    navController.navigate(Screen.LandlordProfileCompletion.route)
                 }
             )
         }
@@ -187,15 +191,46 @@ fun AppNavigation(
         }
 
         // Admin Add Screens
-        composable(Screen.AdminAddStudent.route) {
-            RegisterScreen(
-                onNavigateToLogin = {
+        composable(Screen.LandlordProfileCompletion.route) {
+            LandlordProfileCompletionScreen(
+                onProfileComplete = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.LandlordHome.route) {
+            LandlordHomeScreen(
+                onPropertyClick = { propertyId ->
+                    navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
+                },
+                onAddProperty = {
+                    navController.navigate(Screen.LandlordAddProperty.route)
+                },
+                onEditProperty = { propertyId ->
+                    navController.navigate("${Screen.LandlordEditProperty.route}/$propertyId")
+                },
+                onProfileClick = {
+                    // TODO: Navigate to landlord profile
+                },
+                onLogout = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.LandlordAddProperty.route) {
+            LandlordAddPropertyScreen(
+                onNavigateBack = {
                     navController.popBackStack()
                 },
-                onNavigateToUniversitySelection = {
-                    navController.navigate(Screen.UniversitySelection.route)
-                },
-                isAdminCreating = true
+                onPropertyAdded = {
+                    navController.popBackStack()
+                }
             )
         }
 
@@ -228,7 +263,11 @@ sealed class Screen(val route: String) {
     object Register : Screen("register")
     object UniversitySelection : Screen("university_selection")
     object ProfileCompletion : Screen("profile_completion")
+    object LandlordProfileCompletion : Screen("landlord_profile_completion")
+    object LandlordEditProperty : Screen("landlord_edit_property")
     object Home : Screen("home")
+    object LandlordHome : Screen("landlord_home")
+    object LandlordAddProperty : Screen("landlord_add_property")
     object PropertyDetail : Screen("property_detail")
     object Search : Screen("search")
     object Profile : Screen("profile")

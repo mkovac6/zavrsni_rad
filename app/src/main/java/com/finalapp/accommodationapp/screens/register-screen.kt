@@ -3,6 +3,8 @@ package com.finalapp.accommodationapp.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -10,16 +12,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.finalapp.accommodationapp.data.repository.UserRepository
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import com.finalapp.accommodationapp.data.repository.UserRepository
+import com.finalapp.accommodationapp.data.UserSession
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
     onNavigateToLogin: () -> Unit,
     onNavigateToUniversitySelection: () -> Unit,
+    onNavigateToLandlordProfile: () -> Unit,
     isAdminCreating: Boolean = false
 ) {
     var email by remember { mutableStateOf("") }
@@ -27,220 +30,289 @@ fun RegisterScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successMessage by remember { mutableStateOf<String?>(null) }
+    var showSuccessMessage by remember { mutableStateOf(false) }
+    var selectedAccountType by remember { mutableStateOf("student") } // Default to student
 
-    val coroutineScope = rememberCoroutineScope()
     val userRepository = remember { UserRepository() }
+    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Validation
+    val isEmailValid = email.contains("@") && email.contains(".")
+    val isPasswordValid = password.length >= 6
+    val doPasswordsMatch = password == confirmPassword && password.isNotEmpty()
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = "Create Account",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Logo/Icon
+                Icon(
+                    imageVector = Icons.Filled.Home,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                text = "Join our student accommodation community",
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    text = "Create Account",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            OutlinedTextField(
-                value = email,
-                onValueChange = {
-                    email = it
-                    errorMessage = null
-                },
-                label = { Text("Email") },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                singleLine = true,
-                isError = errorMessage != null
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = password,
-                onValueChange = {
-                    password = it
-                    errorMessage = null
-                },
-                label = { Text("Password") },
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                singleLine = true,
-                isError = errorMessage != null
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = confirmPassword,
-                onValueChange = {
-                    confirmPassword = it
-                    errorMessage = null
-                },
-                label = { Text("Confirm Password") },
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                singleLine = true,
-                isError = errorMessage != null
-            )
-
-            if (errorMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Text(
-                        text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
-            }
 
-            if (successMessage != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Text(
-                        text = successMessage!!,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
-            }
+                Text(
+                    text = "Join our accommodation community",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
-            Button(
-                onClick = {
-                    when {
-                        email.isBlank() || password.isBlank() || confirmPassword.isBlank() -> {
-                            errorMessage = "Please fill in all fields"
-                        }
-                        !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() -> {
-                            errorMessage = "Please enter a valid email address"
-                        }
-                        password.length < 6 -> {
-                            errorMessage = "Password must be at least 6 characters"
-                        }
-                        password != confirmPassword -> {
-                            errorMessage = "Passwords do not match"
-                        }
-                        else -> {
-                            coroutineScope.launch {
-                                isLoading = true
-                                errorMessage = null
+                // Account Type Selection
+                if (!isAdminCreating) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "I am a:",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
 
-                                // Check if email already exists
-                                val emailExists = userRepository.checkEmailExists(email.trim())
-
-                                if (emailExists) {
-                                    errorMessage = "An account with this email already exists"
-                                    snackbarHostState.showSnackbar(
-                                        message = "Email already registered. Please login.",
-                                        duration = SnackbarDuration.Short
-                                    )
-                                } else {
-                                    // Register the user
-                                    val user = userRepository.register(email.trim(), password)
-
-                                    if (user != null) {
-                                        successMessage = "Account created successfully!"
-                                        snackbarHostState.showSnackbar(
-                                            message = "Registration successful! Please complete your profile.",
-                                            duration = SnackbarDuration.Short
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = selectedAccountType == "student",
+                                onClick = { selectedAccountType = "student" },
+                                label = {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Person,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
                                         )
-
-                                        // Small delay to show success message
-                                        kotlinx.coroutines.delay(1500)
-
-                                        // Navigate to university selection
-                                        onNavigateToUniversitySelection()
-                                    } else {
-                                        errorMessage = "Failed to create account. Please try again."
+                                        Text("Student")
                                     }
-                                }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
 
-                                isLoading = false
-                            }
+                            FilterChip(
+                                selected = selectedAccountType == "landlord",
+                                onClick = { selectedAccountType = "landlord" },
+                                label = {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Home,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text("Landlord")
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("Create Account")
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // Email field
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        errorMessage = null
+                    },
+                    label = { Text("Email") },
+                    leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    isError = email.isNotEmpty() && !isEmailValid,
+                    supportingText = {
+                        if (email.isNotEmpty() && !isEmailValid) {
+                            Text("Please enter a valid email address")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Password field
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        errorMessage = null
+                    },
+                    label = { Text("Password") },
+                    leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    isError = password.isNotEmpty() && !isPasswordValid,
+                    supportingText = {
+                        if (password.isNotEmpty() && !isPasswordValid) {
+                            Text("Password must be at least 6 characters")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Confirm Password field
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = {
+                        confirmPassword = it
+                        errorMessage = null
+                    },
+                    label = { Text("Confirm Password") },
+                    leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    isError = confirmPassword.isNotEmpty() && !doPasswordsMatch,
+                    supportingText = {
+                        if (confirmPassword.isNotEmpty() && !doPasswordsMatch) {
+                            Text("Passwords do not match")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Error message
+                errorMessage?.let {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Register button
+                Button(
+                    onClick = {
+                        scope.launch {
+                            isLoading = true
+                            errorMessage = null
+
+                            val accountType = if (isAdminCreating) "student" else selectedAccountType
+                            val user = userRepository.register(email, password, accountType)
+
+                            if (user != null) {
+                                UserSession.currentUser = user
+                                showSuccessMessage = true
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        "Registration successful! Welcome to Student Accommodation!"
+                                    )
+                                }
+
+                                delay(1500)
+
+                                if (isAdminCreating) {
+                                    onNavigateToLogin() // Go back to admin panel
+                                } else {
+                                    when (accountType) {
+                                        "student" -> onNavigateToUniversitySelection()
+                                        "landlord" -> onNavigateToLandlordProfile()
+                                    }
+                                }
+                            } else {
+                                errorMessage = "Registration failed. Email might already be in use."
+                            }
+
+                            isLoading = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = isEmailValid && isPasswordValid && doPasswordsMatch && !isLoading
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Text("Create Account")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Login link
+                TextButton(
+                    onClick = onNavigateToLogin,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Already have an account? Sign in")
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            TextButton(
-                onClick = { onNavigateToLogin() },
-                enabled = !isLoading
-            ) {
-                Text("Already have an account? Login")
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // User type selection
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp)
+            // Success message overlay
+            if (showSuccessMessage) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Note: This creates a Student account",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Text(
-                        text = "Landlord registration coming soon!",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Registration successful!",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -3,6 +3,8 @@ package com.finalapp.accommodationapp.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -12,7 +14,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.finalapp.accommodationapp.data.repository.UserRepository
+import com.finalapp.accommodationapp.data.UserSession
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +33,43 @@ fun LoginScreen(
     val coroutineScope = rememberCoroutineScope()
     val userRepository = remember { UserRepository() }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Extracted login function
+    suspend fun performLogin() {
+        isLoading = true
+        errorMessage = null
+
+        val user = userRepository.login(email.trim(), password)
+
+        if (user != null) {
+            UserSession.currentUser = user
+            val firstName = when(user.email) {
+                "ana.kovac@student.hr" -> "Ana"
+                "marko.novak@gmail.com" -> "Marko"
+                "admin@accommodation.com" -> "Admin"
+                else -> user.email.substringBefore("@")
+            }
+            successMessage = "Welcome back, $firstName!"
+
+            // Show success message briefly before navigating
+            snackbarHostState.showSnackbar(
+                message = "Login successful! Welcome $firstName",
+                duration = SnackbarDuration.Short
+            )
+
+            // Small delay to show the success message
+            delay(1000)
+            onLoginSuccess(user.userType)
+        } else {
+            errorMessage = "Invalid email or password"
+            snackbarHostState.showSnackbar(
+                message = "Login failed. Please check your credentials.",
+                duration = SnackbarDuration.Short
+            )
+        }
+
+        isLoading = false
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -128,32 +169,7 @@ fun LoginScreen(
                         errorMessage = "Please enter email and password"
                     } else {
                         coroutineScope.launch {
-                            isLoading = true
-                            errorMessage = null
-
-                            val user = userRepository.login(email.trim(), password)
-
-                            if (user != null) {
-                                successMessage = "Welcome back, ${user.firstName}!"
-
-                                // Show success message briefly before navigating
-                                snackbarHostState.showSnackbar(
-                                    message = "Login successful! Welcome ${user.firstName}",
-                                    duration = SnackbarDuration.Short
-                                )
-
-                                // Small delay to show the success message
-                                kotlinx.coroutines.delay(1000)
-                                onLoginSuccess(user.userType)
-                            } else {
-                                errorMessage = "Invalid email or password"
-                                snackbarHostState.showSnackbar(
-                                    message = "Login failed. Please check your credentials.",
-                                    duration = SnackbarDuration.Short
-                                )
-                            }
-
-                            isLoading = false
+                            performLogin()
                         }
                     }
                 },
@@ -180,7 +196,7 @@ fun LoginScreen(
                 Text("Don't have an account? Register")
             }
 
-            // For testing - remove in production
+            // Quick login buttons for testing
             Spacer(modifier = Modifier.height(32.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -189,19 +205,84 @@ fun LoginScreen(
                 )
             ) {
                 Column(
-                    modifier = Modifier.padding(12.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Test Credentials",
-                        fontWeight = FontWeight.Medium,
+                        text = "Quick Login (Dev Mode)",
+                        fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Student: ana.kovac@student.hr / password123\nLandlord: marko.novak@gmail.com / password123",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Student login button
+                        OutlinedButton(
+                            onClick = {
+                                email = "ana.kovac@student.hr"
+                                password = "password123"
+                                coroutineScope.launch {
+                                    performLogin()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoading
+                        ) {
+                            Icon(
+                                Icons.Filled.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Student", fontSize = 12.sp)
+                        }
+
+                        // Landlord login button
+                        OutlinedButton(
+                            onClick = {
+                                email = "marko.novak@gmail.com"
+                                password = "password123"
+                                coroutineScope.launch {
+                                    performLogin()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoading
+                        ) {
+                            Icon(
+                                Icons.Filled.Home,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Landlord", fontSize = 12.sp)
+                        }
+
+                        // Admin login button
+                        OutlinedButton(
+                            onClick = {
+                                email = "admin@accommodation.com"
+                                password = "admin123"
+                                coroutineScope.launch {
+                                    performLogin()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoading
+                        ) {
+                            Icon(
+                                Icons.Filled.Settings,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Admin", fontSize = 12.sp)
+                        }
+                    }
                 }
             }
         }
