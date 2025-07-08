@@ -1,4 +1,4 @@
-package com.finalapp.accommodationapp.screens
+package com.finalapp.accommodationapp.screens.landlord
 
 import android.util.Log
 import androidx.compose.foundation.layout.*
@@ -12,10 +12,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.finalapp.accommodationapp.data.repository.AdminRepository
+import com.finalapp.accommodationapp.data.model.admin.Amenity
+import com.finalapp.accommodationapp.data.model.Property
+import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.DateFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -33,7 +38,7 @@ fun LandlordEditPropertyScreen(
 
     // States
     var isLoading by remember { mutableStateOf(true) }
-    var property by remember { mutableStateOf<com.finalapp.accommodationapp.data.model.Property?>(null) }
+    var property by remember { mutableStateOf<Property?>(null) }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var propertyType by remember { mutableStateOf("apartment") }
@@ -47,7 +52,7 @@ fun LandlordEditPropertyScreen(
     var availableFrom by remember { mutableStateOf("") }
     var availableTo by remember { mutableStateOf("") }
 
-    var amenities by remember { mutableStateOf(listOf<com.finalapp.accommodationapp.data.model.Amenity>()) }
+    var amenities by remember { mutableStateOf(listOf<Amenity>()) }
     var selectedAmenities by remember { mutableStateOf(setOf<Int>()) }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -425,7 +430,7 @@ fun LandlordEditPropertyScreen(
                                         )
 
                                         successMessage = "Property updated successfully!"
-                                        kotlinx.coroutines.delay(1000)
+                                        delay(1000)
                                         onPropertyUpdated()
                                     } else {
                                         errorMessage = "Failed to update property"
@@ -532,7 +537,7 @@ fun EditPropertyDatePickerDialog(
                         selectedYear.toString(),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.titleMedium,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                     IconButton(onClick = { selectedYear++ }) {
                         Icon(Icons.Filled.ArrowForward, "Next year")
@@ -552,10 +557,10 @@ fun EditPropertyDatePickerDialog(
                         Icon(Icons.Filled.ArrowBack, "Previous month")
                     }
                     Text(
-                        java.text.DateFormatSymbols().months[selectedMonth - 1],
+                        DateFormatSymbols().months[selectedMonth - 1],
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.titleMedium,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                     IconButton(
                         onClick = {
@@ -583,7 +588,7 @@ fun EditPropertyDatePickerDialog(
                         selectedDay.toString(),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.titleMedium,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                     IconButton(
                         onClick = {

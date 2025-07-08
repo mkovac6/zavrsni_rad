@@ -1,4 +1,4 @@
-package com.finalapp.accommodationapp.screens
+package com.finalapp.accommodationapp.screens.student
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -6,14 +6,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.finalapp.accommodationapp.data.UserSession
-import com.finalapp.accommodationapp.data.repository.StudentRepository
+import com.finalapp.accommodationapp.data.repository.student.StudentRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -214,7 +214,7 @@ fun ProfileCompletionScreen(
                                         message = "Profile completed successfully!",
                                         duration = SnackbarDuration.Short
                                     )
-                                    kotlinx.coroutines.delay(1000)
+                                    delay(1000)
                                     onProfileComplete()
                                 } else {
                                     errorMessage = "Failed to save profile. Please try again."

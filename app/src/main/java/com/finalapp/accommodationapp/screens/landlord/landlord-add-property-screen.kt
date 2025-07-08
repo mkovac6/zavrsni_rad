@@ -1,4 +1,4 @@
-package com.finalapp.accommodationapp.screens
+package com.finalapp.accommodationapp.screens.landlord
 
 import android.util.Log
 import androidx.compose.foundation.layout.*
@@ -13,13 +13,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import com.finalapp.accommodationapp.data.repository.AdminRepository
-import com.finalapp.accommodationapp.data.repository.LandlordRepository
+import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
+import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
-import com.finalapp.accommodationapp.data.model.Amenity
+import com.finalapp.accommodationapp.data.model.admin.Amenity
 import com.finalapp.accommodationapp.data.UserSession
+import java.text.DateFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -538,7 +540,7 @@ fun LandlordDatePickerDialog(
                         selectedYear.toString(),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.titleMedium,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                     IconButton(onClick = { selectedYear++ }) {
                         Icon(Icons.Filled.ArrowForward, "Next year")
@@ -558,10 +560,10 @@ fun LandlordDatePickerDialog(
                         Icon(Icons.Filled.ArrowBack, "Previous month")
                     }
                     Text(
-                        java.text.DateFormatSymbols().months[selectedMonth - 1],
+                        DateFormatSymbols().months[selectedMonth - 1],
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.titleMedium,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                     IconButton(
                         onClick = {
@@ -589,7 +591,7 @@ fun LandlordDatePickerDialog(
                         selectedDay.toString(),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.titleMedium,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                     IconButton(
                         onClick = {

@@ -1,8 +1,7 @@
-package com.finalapp.accommodationapp.screens
+package com.finalapp.accommodationapp.screens.student
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -10,11 +9,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
-import com.finalapp.accommodationapp.data.repository.LandlordRepository
+import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
 import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.UserSession
 import java.text.SimpleDateFormat
@@ -476,7 +476,7 @@ fun PropertyDetailScreen(
 
 @Composable
 fun FeatureChip(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String
 ) {
     Column(

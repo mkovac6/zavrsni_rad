@@ -1,4 +1,4 @@
-package com.finalapp.accommodationapp.screens
+package com.finalapp.accommodationapp.screens.landlord
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,10 +14,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
-import com.finalapp.accommodationapp.data.repository.LandlordRepository
+import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
 import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.UserSession
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -239,7 +240,7 @@ fun LandlordHomeScreen(
                             onClick = { onPropertyClick(property.propertyId) },
                             onToggleStatus = {
                                 // Check if trying to deactivate a property before its availability date
-                                val today = java.util.Date()
+                                val today = Date()
                                 if (property.isActive && property.availableFrom != null && property.availableFrom.after(today)) {
                                     // Show warning when DEACTIVATING before availability date
                                     propertyToToggle = property

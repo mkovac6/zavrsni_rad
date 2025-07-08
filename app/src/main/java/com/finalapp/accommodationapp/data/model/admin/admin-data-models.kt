@@ -1,4 +1,4 @@
-package com.finalapp.accommodationapp.data.model
+package com.finalapp.accommodationapp.data.model.admin
 
 data class StudentWithUser(
     val studentId: Int,

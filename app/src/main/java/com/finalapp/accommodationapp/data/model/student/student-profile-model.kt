@@ -1,4 +1,4 @@
-package com.finalapp.accommodationapp.data.model
+package com.finalapp.accommodationapp.data.model.student
 
 data class StudentProfile(
     val studentId: Int,

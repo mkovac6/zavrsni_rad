@@ -1,4 +1,4 @@
-package com.finalapp.accommodationapp.screens
+package com.finalapp.accommodationapp.screens.admin
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,31 +12,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import com.finalapp.accommodationapp.data.repository.PropertyRepository
-import com.finalapp.accommodationapp.data.repository.AdminRepository
-import com.finalapp.accommodationapp.data.model.Property
+import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
+import com.finalapp.accommodationapp.data.model.admin.StudentWithUser
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdminPropertyListScreen(
+fun AdminStudentListScreen(
     onNavigateBack: () -> Unit,
-    onAddProperty: () -> Unit,
-    onPropertyClick: (Int) -> Unit
+    onAddStudent: () -> Unit
 ) {
-    val propertyRepository = remember { PropertyRepository() }
     val adminRepository = remember { AdminRepository() }
-    var properties by remember { mutableStateOf<List<Property>>(emptyList()) }
+    var students by remember { mutableStateOf<List<StudentWithUser>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var propertyToDelete by remember { mutableStateOf<Property?>(null) }
+    var studentToDelete by remember { mutableStateOf<StudentWithUser?>(null) }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load properties
+    // Load students
     LaunchedEffect(Unit) {
         scope.launch {
             isLoading = true
-            properties = propertyRepository.getAllProperties()
+            students = adminRepository.getAllStudents()
             isLoading = false
         }
     }
@@ -45,15 +42,15 @@ fun AdminPropertyListScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Manage Properties") },
+                title = { Text("Manage Students") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = onAddProperty) {
-                        Icon(Icons.Filled.Add, contentDescription = "Add Property")
+                    IconButton(onClick = onAddStudent) {
+                        Icon(Icons.Filled.Add, contentDescription = "Add Student")
                     }
                 }
             )
@@ -68,7 +65,7 @@ fun AdminPropertyListScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (properties.isEmpty()) {
+        } else if (students.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -79,14 +76,14 @@ fun AdminPropertyListScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(
-                        Icons.Filled.Home,
+                        Icons.Filled.Person,
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "No properties listed",
+                        "No students registered",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -113,13 +110,13 @@ fun AdminPropertyListScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                Icons.Filled.Home,
+                                Icons.Filled.Person,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "Total Properties: ${properties.size}",
+                                "Total Students: ${students.size}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -127,14 +124,13 @@ fun AdminPropertyListScreen(
                     }
                 }
 
-                items(properties) { property ->
-                    AdminPropertyCard(
-                        property = property,
+                items(students) { student ->
+                    StudentCard(
+                        student = student,
                         onDelete = {
-                            propertyToDelete = property
+                            studentToDelete = student
                             showDeleteDialog = true
-                        },
-                        onClick = { onPropertyClick(property.propertyId) }
+                        }
                     )
                 }
             }
@@ -146,26 +142,26 @@ fun AdminPropertyListScreen(
         AlertDialog(
             onDismissRequest = {
                 showDeleteDialog = false
-                propertyToDelete = null
+                studentToDelete = null
             },
-            title = { Text("Delete Property") },
+            title = { Text("Delete Student") },
             text = {
-                Text("Are you sure you want to delete \"${propertyToDelete?.title}\"? This action cannot be undone.")
+                Text("Are you sure you want to delete ${studentToDelete?.firstName} ${studentToDelete?.lastName}? This will also delete their user account.")
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        propertyToDelete?.let { property ->
+                        studentToDelete?.let { student ->
                             scope.launch {
                                 showDeleteDialog = false
-                                propertyToDelete = null
+                                studentToDelete = null
 
-                                val success = adminRepository.deleteProperty(property.propertyId)
+                                val success = adminRepository.deleteStudent(student.userId)
                                 if (success) {
-                                    properties = propertyRepository.getAllProperties()
-                                    snackbarHostState.showSnackbar("Property deleted successfully")
+                                    students = adminRepository.getAllStudents()
+                                    snackbarHostState.showSnackbar("Student deleted successfully")
                                 } else {
-                                    snackbarHostState.showSnackbar("Failed to delete property")
+                                    snackbarHostState.showSnackbar("Failed to delete student")
                                 }
                             }
                         }
@@ -178,7 +174,7 @@ fun AdminPropertyListScreen(
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
-                        propertyToDelete = null
+                        studentToDelete = null
                     }
                 ) {
                     Text("Cancel")
@@ -190,13 +186,11 @@ fun AdminPropertyListScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdminPropertyCard(
-    property: Property,
-    onDelete: () -> Unit,
-    onClick: () -> Unit
+fun StudentCard(
+    student: StudentWithUser,
+    onDelete: () -> Unit
 ) {
     Card(
-        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -206,34 +200,40 @@ fun AdminPropertyCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Icon(
+                Icons.Filled.Person,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = property.title,
+                    text = "${student.firstName} ${student.lastName}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "${property.address}, ${property.city}",
+                    text = student.email,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "Type: ${property.propertyType.capitalize()}",
-                    style = MaterialTheme.typography.bodySmall
+                    text = student.universityName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                    text = "€${property.pricePerMonth.toInt()}/month",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Landlord: ${property.landlordName}",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    text = "${property.bedrooms} bed | ${property.bathrooms} bath | ${property.totalCapacity} people",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                student.phone?.let {
+                    Text(
+                        text = "Phone: $it",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                student.yearOfStudy?.let {
+                    Text(
+                        text = "Year: $it | ${student.program ?: "No program specified"}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
             IconButton(onClick = onDelete) {
                 Icon(

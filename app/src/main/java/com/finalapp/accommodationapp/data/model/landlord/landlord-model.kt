@@ -1,4 +1,4 @@
-package com.finalapp.accommodationapp.data.model
+package com.finalapp.accommodationapp.data.model.landlord
 
 data class Landlord(
     val landlordId: Int,

@@ -4,9 +4,7 @@ import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,9 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import com.finalapp.accommodationapp.data.repository.AdminRepository
-import com.finalapp.accommodationapp.data.model.LandlordWithUser
-import com.finalapp.accommodationapp.data.model.Amenity
+import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
+import com.finalapp.accommodationapp.data.model.admin.LandlordWithUser
+import com.finalapp.accommodationapp.data.model.admin.Amenity
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -418,9 +417,9 @@ fun DatePickerDialog(
     onDateSelected: (Int, Int, Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
-    val currentMonth = java.util.Calendar.getInstance().get(java.util.Calendar.MONTH) + 1
-    val currentDay = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_MONTH)
+    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+    val currentMonth = Calendar.getInstance().get(Calendar.MONTH) + 1
+    val currentDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
 
     var selectedYear by remember { mutableStateOf(currentYear) }
     var selectedMonth by remember { mutableStateOf(currentMonth) }

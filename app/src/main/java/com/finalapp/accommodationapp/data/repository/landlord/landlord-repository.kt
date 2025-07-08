@@ -1,8 +1,8 @@
-package com.finalapp.accommodationapp.data.repository
+package com.finalapp.accommodationapp.data.repository.landlord
 
 import android.util.Log
 import com.finalapp.accommodationapp.data.DatabaseConnection
-import com.finalapp.accommodationapp.data.model.Landlord
+import com.finalapp.accommodationapp.data.model.landlord.Landlord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

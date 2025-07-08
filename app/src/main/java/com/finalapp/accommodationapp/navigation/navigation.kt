@@ -9,6 +9,22 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.screens.*
+import com.finalapp.accommodationapp.screens.landlord.AddLandlordScreen
+import com.finalapp.accommodationapp.screens.AddPropertyScreen
+import com.finalapp.accommodationapp.screens.admin.AdminDashboardScreen
+import com.finalapp.accommodationapp.screens.admin.AdminLandlordListScreen
+import com.finalapp.accommodationapp.screens.admin.AdminPropertyListScreen
+import com.finalapp.accommodationapp.screens.admin.AdminStudentListScreen
+import com.finalapp.accommodationapp.screens.admin.AdminUniversityListScreen
+import com.finalapp.accommodationapp.screens.landlord.LandlordAddPropertyScreen
+import com.finalapp.accommodationapp.screens.landlord.LandlordEditPropertyScreen
+import com.finalapp.accommodationapp.screens.landlord.LandlordHomeScreen
+import com.finalapp.accommodationapp.screens.landlord.LandlordProfileCompletionScreen
+import com.finalapp.accommodationapp.screens.student.HomeScreen
+import com.finalapp.accommodationapp.screens.student.LoginScreen
+import com.finalapp.accommodationapp.screens.student.ProfileCompletionScreen
+import com.finalapp.accommodationapp.screens.student.PropertyDetailScreen
+import com.finalapp.accommodationapp.screens.student.UniversitySelectionScreen
 
 @Composable
 fun AppNavigation(

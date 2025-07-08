@@ -1,11 +1,12 @@
-package com.finalapp.accommodationapp.data.repository
+package com.finalapp.accommodationapp.data.repository.student
 
 import android.util.Log
 import com.finalapp.accommodationapp.data.DatabaseConnection
-import com.finalapp.accommodationapp.data.model.StudentProfile
+import com.finalapp.accommodationapp.data.model.student.StudentProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.sql.Date
+import java.sql.Types
 
 class StudentRepository {
     companion object {
@@ -62,11 +63,11 @@ class StudentRepository {
                 setString(4, lastName)
                 setString(5, phone)
                 setString(6, studentNumber)
-                if (yearOfStudy != null) setInt(7, yearOfStudy) else setNull(7, java.sql.Types.INTEGER)
+                if (yearOfStudy != null) setInt(7, yearOfStudy) else setNull(7, Types.INTEGER)
                 setString(8, program)
-                if (preferredMoveInDate != null) setDate(9, Date.valueOf(preferredMoveInDate)) else setNull(9, java.sql.Types.DATE)
-                if (budgetMin != null) setDouble(10, budgetMin) else setNull(10, java.sql.Types.DECIMAL)
-                if (budgetMax != null) setDouble(11, budgetMax) else setNull(11, java.sql.Types.DECIMAL)
+                if (preferredMoveInDate != null) setDate(9, Date.valueOf(preferredMoveInDate)) else setNull(9, Types.DATE)
+                if (budgetMin != null) setDouble(10, budgetMin) else setNull(10, Types.DECIMAL)
+                if (budgetMax != null) setDouble(11, budgetMax) else setNull(11, Types.DECIMAL)
             }
             
             val rowsAffected = preparedStatement?.executeUpdate() ?: 0

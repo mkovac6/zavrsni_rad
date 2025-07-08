@@ -1,4 +1,4 @@
-package com.finalapp.accommodationapp.screens
+package com.finalapp.accommodationapp.screens.landlord
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,7 +16,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.UserRepository
-import com.finalapp.accommodationapp.data.repository.AdminRepository
+import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -1,12 +1,14 @@
-package com.finalapp.accommodationapp.data.repository
+package com.finalapp.accommodationapp.data.repository.admin
 
 import android.util.Log
 import com.finalapp.accommodationapp.data.DatabaseConnection
-import com.finalapp.accommodationapp.data.model.StudentWithUser
-import com.finalapp.accommodationapp.data.model.LandlordWithUser
-import com.finalapp.accommodationapp.data.model.Amenity
+import com.finalapp.accommodationapp.data.model.admin.StudentWithUser
+import com.finalapp.accommodationapp.data.model.admin.LandlordWithUser
+import com.finalapp.accommodationapp.data.model.admin.Amenity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.sql.Date
+import java.sql.Statement
 
 class AdminRepository {
     companion object {
@@ -320,7 +322,7 @@ class AdminRepository {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
             """.trimIndent()
 
-            val statement = connection?.prepareStatement(query, java.sql.Statement.RETURN_GENERATED_KEYS)
+            val statement = connection?.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)
             statement?.apply {
                 setInt(1, landlordId)
                 setString(2, title)
@@ -333,7 +335,7 @@ class AdminRepository {
                 setInt(9, bedrooms)
                 setInt(10, bathrooms)
                 setInt(11, totalCapacity)
-                setDate(12, java.sql.Date.valueOf(availableFrom))
+                setDate(12, Date.valueOf(availableFrom))
             }
 
             statement?.executeUpdate()
@@ -487,7 +489,7 @@ class AdminRepository {
             try {
                 // First create the user account
                 val userQuery = "INSERT INTO Users (email, password_hash, user_type, is_profile_complete) VALUES (?, ?, 'landlord', 1)"
-                val userStatement = connection?.prepareStatement(userQuery, java.sql.Statement.RETURN_GENERATED_KEYS)
+                val userStatement = connection?.prepareStatement(userQuery, Statement.RETURN_GENERATED_KEYS)
                 userStatement?.setString(1, email)
                 userStatement?.setString(2, password)
                 userStatement?.executeUpdate()
