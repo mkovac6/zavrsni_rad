@@ -27,6 +27,7 @@ fun LandlordHomeScreen(
     onPropertyClick: (Int) -> Unit,
     onAddProperty: () -> Unit,
     onEditProperty: (Int) -> Unit,
+    onBookingsClick: () -> Unit,  // Add this parameter
     onProfileClick: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -91,6 +92,13 @@ fun LandlordHomeScreen(
                     }
                 },
                 actions = {
+                    // Add bookings button
+                    IconButton(onClick = onBookingsClick) {
+                        Icon(
+                            Icons.Filled.DateRange,
+                            contentDescription = "Booking Requests"
+                        )
+                    }
                     IconButton(onClick = onProfileClick) {
                         Icon(Icons.Filled.Person, contentDescription = "Profile")
                     }
@@ -238,6 +246,7 @@ fun LandlordHomeScreen(
                         LandlordPropertyCard(
                             property = property,
                             onClick = { onPropertyClick(property.propertyId) },
+                            onEditClick = { onEditProperty(property.propertyId) },  // Add this
                             onToggleStatus = {
                                 // Check if trying to deactivate a property before its availability date
                                 val today = Date()
@@ -328,6 +337,7 @@ fun LandlordHomeScreen(
 fun LandlordPropertyCard(
     property: Property,
     onClick: () -> Unit,
+    onEditClick: () -> Unit,  // Add this parameter
     onToggleStatus: () -> Unit
 ) {
     Card(
@@ -368,23 +378,14 @@ fun LandlordPropertyCard(
                     }
                 }
 
-                // Status toggle switch
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Edit button
+                IconButton(
+                    onClick = { onEditClick() }
                 ) {
-                    Text(
-                        text = if (property.isActive) "Active" else "Inactive",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (property.isActive) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Switch(
-                        checked = property.isActive,
-                        onCheckedChange = { onToggleStatus() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.primary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
-                        )
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = "Edit Property",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -428,6 +429,33 @@ fun LandlordPropertyCard(
                         text = "Available from ${dateFormat.format(date)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Status toggle row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (property.isActive) "Active" else "Inactive",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (property.isActive)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = property.isActive,
+                        onCheckedChange = { onToggleStatus() }
                     )
                 }
             }
