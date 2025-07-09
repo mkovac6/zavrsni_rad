@@ -15,8 +15,12 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
+import com.finalapp.accommodationapp.data.repository.student.FavoritesRepository
+import com.finalapp.accommodationapp.data.repository.student.BookingRepository
+import com.finalapp.accommodationapp.data.repository.student.StudentRepository
 import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.UserSession
+import com.finalapp.accommodationapp.screens.components.BookingDialog
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -30,14 +34,25 @@ fun PropertyDetailScreen(
 ) {
     val propertyRepository = remember { PropertyRepository() }
     val landlordRepository = remember { LandlordRepository() }
+    val favoritesRepository = remember { FavoritesRepository() }
+    val bookingRepository = remember { BookingRepository() }
+    val studentRepository = remember { StudentRepository() }
+
     var property by remember { mutableStateOf<Property?>(null) }
     var amenities by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLandlordOwner by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    var isFavorite by remember { mutableStateOf(false) }
+    var studentId by remember { mutableStateOf(0) }
+    var showBookingDialog by remember { mutableStateOf(false) }
+    var bookingMessage by remember { mutableStateOf("") }
+    var isProcessingBooking by remember { mutableStateOf(false) }
 
-    // Load property details and check ownership
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Load property details and check ownership/favorites
     LaunchedEffect(propertyId) {
         scope.launch {
             isLoading = true
@@ -60,6 +75,13 @@ fun PropertyDetailScreen(
                             val propertyLandlordId = propertyRepository.getLandlordIdByPropertyId(propertyId)
                             isLandlordOwner = landlord.landlordId == propertyLandlordId
                         }
+                    } else if (currentUser?.userType == "student") {
+                        // Check if property is favorite
+                        val student = studentRepository.getStudentProfile(currentUser.userId)
+                        if (student != null) {
+                            studentId = student.studentId
+                            isFavorite = favoritesRepository.isFavorite(student.studentId, propertyId)
+                        }
                     }
                 } else {
                     errorMessage = "Property not found"
@@ -73,6 +95,7 @@ fun PropertyDetailScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Property Details") },
@@ -94,9 +117,31 @@ fun PropertyDetailScreen(
                     }
 
                     // Show favorite button for students
-                    if (UserSession.currentUser?.userType == "student") {
-                        IconButton(onClick = { /* TODO: Add to favorites */ }) {
-                            Icon(Icons.Filled.FavoriteBorder, contentDescription = "Add to favorites")
+                    if (UserSession.currentUser?.userType == "student" && studentId > 0) {
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    if (isFavorite) {
+                                        val removed = favoritesRepository.removeFromFavorites(studentId, propertyId)
+                                        if (removed) {
+                                            isFavorite = false
+                                            snackbarHostState.showSnackbar("Removed from favorites")
+                                        }
+                                    } else {
+                                        val added = favoritesRepository.addToFavorites(studentId, propertyId)
+                                        if (added) {
+                                            isFavorite = true
+                                            snackbarHostState.showSnackbar("Added to favorites")
+                                        }
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                                tint = if (isFavorite) Color.Red else MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
@@ -129,7 +174,7 @@ fun PropertyDetailScreen(
                                 }
                             }
                             Button(
-                                onClick = onBookingClick,
+                                onClick = { showBookingDialog = true },
                                 modifier = Modifier.height(48.dp)
                             ) {
                                 Text("Book Now")
@@ -471,6 +516,49 @@ fun PropertyDetailScreen(
                 }
             }
         }
+    }
+
+    // Booking Dialog
+    if (showBookingDialog && property != null) {
+        BookingDialog(
+            propertyId = propertyId,
+            pricePerMonth = property!!.pricePerMonth,
+            availableFrom = property!!.availableFrom,
+            availableTo = property!!.availableTo,
+            onDismiss = { showBookingDialog = false },
+            onConfirm = { startDate, endDate, totalPrice, message ->
+                scope.launch {
+                    isProcessingBooking = true
+                    showBookingDialog = false
+
+                    // Check availability first
+                    val isAvailable = bookingRepository.checkDateAvailability(propertyId, startDate, endDate)
+
+                    if (isAvailable) {
+                        // Create booking
+                        val success = bookingRepository.createBooking(
+                            propertyId = propertyId,
+                            studentId = studentId,
+                            startDate = startDate,
+                            endDate = endDate,
+                            totalPrice = totalPrice,
+                            messageToLandlord = message
+                        )
+
+                        if (success) {
+                            snackbarHostState.showSnackbar("Booking request sent successfully!")
+                            bookingMessage = ""
+                        } else {
+                            snackbarHostState.showSnackbar("Failed to send booking request")
+                        }
+                    } else {
+                        snackbarHostState.showSnackbar("Selected dates are not available")
+                    }
+
+                    isProcessingBooking = false
+                }
+            }
+        )
     }
 }
 

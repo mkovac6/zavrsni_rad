@@ -63,58 +63,62 @@ class UserRepository {
         }
     }
 
-    suspend fun register(email: String, password: String, userType: String = "student"): User? = withContext(Dispatchers.IO) {
-        try {
-            val connection = DatabaseConnection.getConnection()
+    suspend fun register(email: String, password: String, userType: String = "student"): User? =
+        withContext(Dispatchers.IO) {
+            try {
+                val connection = DatabaseConnection.getConnection()
 
-            // First check if email already exists
-            if (checkEmailExists(email)) {
-                Log.d(TAG, "Registration failed: Email already exists")
-                return@withContext null
-            }
+                // First check if email already exists
+                if (checkEmailExists(email)) {
+                    Log.d(TAG, "Registration failed: Email already exists")
+                    return@withContext null
+                }
 
-            // Insert new user
-            val insertQuery = """
+                // Insert new user
+                val insertQuery = """
                 INSERT INTO Users (email, password_hash, user_type, is_profile_complete)
                 VALUES (?, ?, ?, 0)
             """.trimIndent()
 
-            val preparedStatement = connection?.prepareStatement(insertQuery, java.sql.Statement.RETURN_GENERATED_KEYS)
-            preparedStatement?.setString(1, email)
-            preparedStatement?.setString(2, password) // In production, hash this!
-            preparedStatement?.setString(3, userType)
+                val preparedStatement = connection?.prepareStatement(
+                    insertQuery,
+                    java.sql.Statement.RETURN_GENERATED_KEYS
+                )
+                preparedStatement?.setString(1, email)
+                preparedStatement?.setString(2, password) // In production, hash this!
+                preparedStatement?.setString(3, userType)
 
-            val rowsAffected = preparedStatement?.executeUpdate() ?: 0
+                val rowsAffected = preparedStatement?.executeUpdate() ?: 0
 
-            var user: User? = null
-            if (rowsAffected > 0) {
-                val generatedKeys = preparedStatement?.generatedKeys
-                if (generatedKeys?.next() == true) {
-                    val userId = generatedKeys.getInt(1)
-                    user = User(
-                        userId = userId,
-                        email = email,
-                        userType = userType,
-                        isProfileComplete = false,
-                        firstName = ""
-                    )
-                    Log.d(TAG, "Registration successful for: $email")
+                var user: User? = null
+                if (rowsAffected > 0) {
+                    val generatedKeys = preparedStatement?.generatedKeys
+                    if (generatedKeys?.next() == true) {
+                        val userId = generatedKeys.getInt(1)
+                        user = User(
+                            userId = userId,
+                            email = email,
+                            userType = userType,
+                            isProfileComplete = false,
+                            firstName = ""
+                        )
+                        Log.d(TAG, "Registration successful for: $email")
 
-                    // Save user to session
-                    UserSession.setUser(user)
+                        // Save user to session
+                        UserSession.setUser(user)
+                    }
+                    generatedKeys?.close()
                 }
-                generatedKeys?.close()
+
+                preparedStatement?.close()
+                connection?.close()
+
+                user
+            } catch (e: Exception) {
+                Log.e(TAG, "Registration error: ${e.message}", e)
+                null
             }
-
-            preparedStatement?.close()
-            connection?.close()
-
-            user
-        } catch (e: Exception) {
-            Log.e(TAG, "Registration error: ${e.message}", e)
-            null
         }
-    }
 
     suspend fun checkEmailExists(email: String): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -137,4 +141,31 @@ class UserRepository {
             false
         }
     }
+
+    suspend fun updateUserProfileStatus(userId: Int, isComplete: Boolean): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val connection = DatabaseConnection.getConnection()
+                val query =
+                    "UPDATE Users SET is_profile_complete = ?, updated_at = GETDATE() WHERE user_id = ?"
+                val preparedStatement = connection?.prepareStatement(query)
+
+                preparedStatement?.apply {
+                    setBoolean(1, isComplete)
+                    setInt(2, userId)
+                }
+
+                val rowsAffected = preparedStatement?.executeUpdate() ?: 0
+
+                preparedStatement?.close()
+                connection?.close()
+
+                Log.d(TAG, "Updated profile status for user $userId to $isComplete")
+                rowsAffected > 0
+            } catch (e: Exception) {
+                Log.e(TAG, "Error updating profile status: ${e.message}", e)
+                false
+            }
+        }
+
 }

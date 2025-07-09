@@ -24,7 +24,7 @@ import java.util.Locale
 @Composable
 fun HomeScreen(
     onPropertyClick: (Int) -> Unit,
-    onSearchClick: () -> Unit,
+    onBookingsClick: () -> Unit,  // Changed from onSearchClick
     onProfileClick: () -> Unit,
     onFavoritesClick: () -> Unit,
     onLogout: () -> Unit
@@ -80,10 +80,10 @@ fun HomeScreen(
                     onClick = { }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
-                    label = { Text("Search") },
+                    icon = { Icon(Icons.Filled.DateRange, contentDescription = "Bookings") },  // Changed icon
+                    label = { Text("Bookings") },  // Changed label
                     selected = false,
-                    onClick = onSearchClick
+                    onClick = onBookingsClick  // Changed onClick
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Favorite, contentDescription = "Favorites") },

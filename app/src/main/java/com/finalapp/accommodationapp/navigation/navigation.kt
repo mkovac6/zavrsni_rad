@@ -8,15 +8,17 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.finalapp.accommodationapp.data.UserSession
-import com.finalapp.accommodationapp.screens.*
-import com.finalapp.accommodationapp.screens.landlord.AddLandlordScreen
 import com.finalapp.accommodationapp.screens.AddPropertyScreen
+import com.finalapp.accommodationapp.screens.RegisterScreen
+import com.finalapp.accommodationapp.screens.admin.AdminAddStudentScreen
 import com.finalapp.accommodationapp.screens.admin.AdminDashboardScreen
 import com.finalapp.accommodationapp.screens.admin.AdminLandlordListScreen
 import com.finalapp.accommodationapp.screens.admin.AdminPropertyListScreen
 import com.finalapp.accommodationapp.screens.admin.AdminStudentListScreen
 import com.finalapp.accommodationapp.screens.admin.AdminUniversityListScreen
+import com.finalapp.accommodationapp.screens.landlord.AddLandlordScreen
 import com.finalapp.accommodationapp.screens.landlord.LandlordAddPropertyScreen
+import com.finalapp.accommodationapp.screens.landlord.LandlordBookingManagementScreen
 import com.finalapp.accommodationapp.screens.landlord.LandlordEditPropertyScreen
 import com.finalapp.accommodationapp.screens.landlord.LandlordHomeScreen
 import com.finalapp.accommodationapp.screens.landlord.LandlordProfileCompletionScreen
@@ -24,6 +26,9 @@ import com.finalapp.accommodationapp.screens.student.HomeScreen
 import com.finalapp.accommodationapp.screens.student.LoginScreen
 import com.finalapp.accommodationapp.screens.student.ProfileCompletionScreen
 import com.finalapp.accommodationapp.screens.student.PropertyDetailScreen
+import com.finalapp.accommodationapp.screens.student.StudentBookingsScreen
+import com.finalapp.accommodationapp.screens.student.StudentFavoritesScreen
+import com.finalapp.accommodationapp.screens.student.StudentProfileScreen
 import com.finalapp.accommodationapp.screens.student.UniversitySelectionScreen
 
 @Composable
@@ -106,14 +111,14 @@ fun AppNavigation(
                 onPropertyClick = { propertyId ->
                     navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
                 },
-                onSearchClick = {
-                    // TODO: Navigate to search screen
+                onBookingsClick = {
+                    navController.navigate(Screen.StudentBookings.route)  // Navigate to bookings
                 },
                 onProfileClick = {
-                    // TODO: Navigate to profile screen
+                    navController.navigate(Screen.StudentProfile.route)
                 },
                 onFavoritesClick = {
-                    // TODO: Navigate to favorites screen
+                    navController.navigate(Screen.StudentFavorites.route)
                 },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
@@ -123,7 +128,6 @@ fun AppNavigation(
             )
         }
 
-        // Single PropertyDetail route with edit functionality
         composable(
             "${Screen.PropertyDetail.route}/{propertyId}",
             arguments = listOf(navArgument("propertyId") { type = NavType.IntType })
@@ -258,7 +262,17 @@ fun AppNavigation(
             )
         }
 
-        // MISSING ROUTE - Landlord Edit Property
+        composable(Screen.AdminAddStudent.route) {
+            AdminAddStudentScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onStudentAdded = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
         composable(
             "${Screen.LandlordEditProperty.route}/{propertyId}",
             arguments = listOf(navArgument("propertyId") { type = NavType.IntType })
@@ -303,6 +317,55 @@ fun AppNavigation(
                 }
             )
         }
+
+        // Student Profile
+        composable(Screen.StudentProfile.route) {
+            StudentProfileScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onEditProfile = {
+                    // TODO: Navigate to edit profile screen if you want to implement it
+                }
+            )
+        }
+
+// Student Bookings
+        composable(Screen.StudentBookings.route) {
+            StudentBookingsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onPropertyClick = { propertyId ->
+                    navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
+                }
+            )
+        }
+
+// Student Favorites
+        composable(Screen.StudentFavorites.route) {
+            StudentFavoritesScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onPropertyClick = { propertyId ->
+                    navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
+                }
+            )
+        }
+
+// Landlord Booking Management (add this to landlord section)
+        composable(Screen.LandlordBookings.route) {
+            LandlordBookingManagementScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onPropertyClick = { propertyId ->
+                    navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
+                }
+            )
+        }
+
     }
 }
 
@@ -315,12 +378,13 @@ sealed class Screen(val route: String) {
     object LandlordEditProperty : Screen("landlord_edit_property")
     object Home : Screen("home")
     object LandlordHome : Screen("landlord_home")
+    object LandlordBookings : Screen("landlord_bookings")
     object LandlordAddProperty : Screen("landlord_add_property")
     object PropertyDetail : Screen("property_detail")
     object Search : Screen("search")
-    object Profile : Screen("profile")
-    object Favorites : Screen("favorites")
-    object Booking : Screen("booking")
+    object StudentProfile : Screen("student_profile")
+    object StudentBookings : Screen("student_bookings")
+    object StudentFavorites : Screen("student_favorites")
 
     // Admin screens
     object AdminDashboard : Screen("admin_dashboard")
