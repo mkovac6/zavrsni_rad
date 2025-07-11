@@ -12,7 +12,7 @@ class StudentRepository {
     companion object {
         private const val TAG = "StudentRepository"
     }
-    
+
     suspend fun createStudentProfile(
         userId: Int,
         universityId: Int,
@@ -28,13 +28,13 @@ class StudentRepository {
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             val connection = DatabaseConnection.getConnection()
-            
+
             // First check if profile already exists
             val checkQuery = "SELECT COUNT(*) as count FROM Students WHERE user_id = ?"
             val checkStmt = connection?.prepareStatement(checkQuery)
             checkStmt?.setInt(1, userId)
             val resultSet = checkStmt?.executeQuery()
-            
+
             if (resultSet?.next() == true && resultSet.getInt("count") > 0) {
                 Log.d(TAG, "Student profile already exists for user $userId")
                 resultSet.close()
@@ -42,10 +42,10 @@ class StudentRepository {
                 connection?.close()
                 return@withContext false
             }
-            
+
             resultSet?.close()
             checkStmt?.close()
-            
+
             // Insert new student profile
             val insertQuery = """
                 INSERT INTO Students (
@@ -54,7 +54,7 @@ class StudentRepository {
                     budget_min, budget_max
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
-            
+
             val preparedStatement = connection?.prepareStatement(insertQuery)
             preparedStatement?.apply {
                 setInt(1, userId)
@@ -65,14 +65,17 @@ class StudentRepository {
                 setString(6, studentNumber)
                 if (yearOfStudy != null) setInt(7, yearOfStudy) else setNull(7, Types.INTEGER)
                 setString(8, program)
-                if (preferredMoveInDate != null) setDate(9, Date.valueOf(preferredMoveInDate)) else setNull(9, Types.DATE)
+                if (preferredMoveInDate != null) setDate(
+                    9,
+                    Date.valueOf(preferredMoveInDate)
+                ) else setNull(9, Types.DATE)
                 if (budgetMin != null) setDouble(10, budgetMin) else setNull(10, Types.DECIMAL)
                 if (budgetMax != null) setDouble(11, budgetMax) else setNull(11, Types.DECIMAL)
             }
-            
+
             val rowsAffected = preparedStatement?.executeUpdate() ?: 0
             preparedStatement?.close()
-            
+
             // Update user profile completion status
             if (rowsAffected > 0) {
                 val updateUserQuery = "UPDATE Users SET is_profile_complete = 1 WHERE user_id = ?"
@@ -80,19 +83,19 @@ class StudentRepository {
                 updateStmt?.setInt(1, userId)
                 updateStmt?.executeUpdate()
                 updateStmt?.close()
-                
+
                 Log.d(TAG, "Student profile created successfully for user $userId")
             }
-            
+
             connection?.close()
             rowsAffected > 0
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Error creating student profile: ${e.message}", e)
             false
         }
     }
-    
+
     suspend fun getStudentProfile(userId: Int): StudentProfile? = withContext(Dispatchers.IO) {
         try {
             val connection = DatabaseConnection.getConnection()
@@ -102,11 +105,11 @@ class StudentRepository {
                 JOIN Universities u ON s.university_id = u.university_id
                 WHERE s.user_id = ?
             """.trimIndent()
-            
+
             val preparedStatement = connection?.prepareStatement(query)
             preparedStatement?.setInt(1, userId)
             val resultSet = preparedStatement?.executeQuery()
-            
+
             var profile: StudentProfile? = null
             if (resultSet?.next() == true) {
                 profile = StudentProfile(
@@ -124,15 +127,69 @@ class StudentRepository {
                     budgetMax = resultSet.getDouble("budget_max")
                 )
             }
-            
+
             resultSet?.close()
             preparedStatement?.close()
             connection?.close()
-            
+
             profile
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching student profile: ${e.message}", e)
             null
+        }
+    }
+
+    suspend fun updateStudentProfile(
+        studentId: Int,
+        firstName: String,
+        lastName: String,
+        phone: String,
+        studentNumber: String?,
+        yearOfStudy: Int?,
+        program: String?,
+        budgetMin: Double?,
+        budgetMax: Double?
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val connection = DatabaseConnection.getConnection()
+
+            val updateQuery = """
+            UPDATE Students SET 
+                first_name = ?,
+                last_name = ?,
+                phone = ?,
+                student_number = ?,
+                year_of_study = ?,
+                program = ?,
+                budget_min = ?,
+                budget_max = ?,
+                updated_at = GETDATE()
+            WHERE student_id = ?
+        """.trimIndent()
+
+            val preparedStatement = connection?.prepareStatement(updateQuery)
+            preparedStatement?.apply {
+                setString(1, firstName)
+                setString(2, lastName)
+                setString(3, phone)
+                setString(4, studentNumber)
+                if (yearOfStudy != null) setInt(5, yearOfStudy) else setNull(5, Types.INTEGER)
+                setString(6, program)
+                if (budgetMin != null) setDouble(7, budgetMin) else setNull(7, Types.DECIMAL)
+                if (budgetMax != null) setDouble(8, budgetMax) else setNull(8, Types.DECIMAL)
+                setInt(9, studentId)
+            }
+
+            val rowsAffected = preparedStatement?.executeUpdate() ?: 0
+            preparedStatement?.close()
+            connection?.close()
+
+            Log.d(TAG, "Updated student profile: $studentId, rows affected: $rowsAffected")
+            rowsAffected > 0
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating student profile: ${e.message}", e)
+            false
         }
     }
 }

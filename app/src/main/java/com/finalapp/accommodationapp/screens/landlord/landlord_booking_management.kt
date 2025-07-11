@@ -23,7 +23,8 @@ import java.util.*
 @Composable
 fun LandlordBookingManagementScreen(
     onNavigateBack: () -> Unit,
-    onPropertyClick: (Int) -> Unit
+    onPropertyClick: (Int) -> Unit,
+    onHomeClick: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val bookingRepository = remember { BookingRepository() }
@@ -34,6 +35,7 @@ fun LandlordBookingManagementScreen(
     var selectedTab by remember { mutableStateOf(0) }
     var processingBookingId by remember { mutableStateOf<Int?>(null) }
     var showSuccessMessage by remember { mutableStateOf("") }
+    var pendingCount by remember { mutableStateOf(0) }
 
     // Load bookings
     LaunchedEffect(Unit) {
@@ -46,6 +48,7 @@ fun LandlordBookingManagementScreen(
 
             if (landlordProfile != null) {
                 bookings = bookingRepository.getLandlordBookings(landlordProfile.landlordId)
+                pendingCount = bookings.count { it.status == "pending" }
             }
 
             isLoading = false
@@ -63,13 +66,39 @@ fun LandlordBookingManagementScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Booking Requests") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back")
-                    }
-                }
+                title = { Text("Booking Requests") }
             )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                    label = { Text("Home") },
+                    selected = false,
+                    onClick = onHomeClick
+                )
+                NavigationBarItem(
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (pendingCount > 0) {
+                                    Badge {
+                                        Text(
+                                            text = pendingCount.toString(),
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.DateRange, contentDescription = "Bookings")
+                        }
+                    },
+                    label = { Text("Bookings") },
+                    selected = true,
+                    onClick = { }
+                )
+            }
         },
         snackbarHost = {
             if (showSuccessMessage.isNotEmpty()) {
@@ -98,7 +127,6 @@ fun LandlordBookingManagementScreen(
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Pending")
-                            val pendingCount = bookings.count { it.status == "pending" }
                             if (pendingCount > 0) {
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Badge { Text(pendingCount.toString()) }
@@ -174,6 +202,7 @@ fun LandlordBookingManagementScreen(
                                             val landlordProfile = landlordRepository.getLandlordByUserId(userId)
                                             if (landlordProfile != null) {
                                                 bookings = bookingRepository.getLandlordBookings(landlordProfile.landlordId)
+                                                pendingCount = bookings.count { it.status == "pending" }
                                             }
                                         }
                                         processingBookingId = null
@@ -192,6 +221,7 @@ fun LandlordBookingManagementScreen(
                                             val landlordProfile = landlordRepository.getLandlordByUserId(userId)
                                             if (landlordProfile != null) {
                                                 bookings = bookingRepository.getLandlordBookings(landlordProfile.landlordId)
+                                                pendingCount = bookings.count { it.status == "pending" }
                                             }
                                         }
                                         processingBookingId = null

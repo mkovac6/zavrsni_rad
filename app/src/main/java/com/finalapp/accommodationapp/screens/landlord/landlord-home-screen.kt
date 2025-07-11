@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
+import com.finalapp.accommodationapp.data.repository.student.BookingRepository
 import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.UserSession
 import java.text.SimpleDateFormat
@@ -27,16 +29,21 @@ fun LandlordHomeScreen(
     onPropertyClick: (Int) -> Unit,
     onAddProperty: () -> Unit,
     onEditProperty: (Int) -> Unit,
-    onBookingsClick: () -> Unit,  // Add this parameter
+    onBookingsClick: () -> Unit,
     onProfileClick: () -> Unit,
     onLogout: () -> Unit
 ) {
     val propertyRepository = remember { PropertyRepository() }
     val landlordRepository = remember { LandlordRepository() }
+    val bookingRepository = remember { BookingRepository() }
+
     var properties by remember { mutableStateOf<List<Property>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var landlordName by remember { mutableStateOf("") }
     var landlordId by remember { mutableStateOf<Int?>(null) }
+    var pendingBookingsCount by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableStateOf(0) } // 0=Home, 1=Bookings, 2=Profile
+
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -50,12 +57,13 @@ fun LandlordHomeScreen(
             isLoading = true
             if (landlordId != null) {
                 properties = propertyRepository.getPropertiesByLandlordId(landlordId!!)
+                pendingBookingsCount = bookingRepository.countPendingBookingsForLandlord(landlordId!!)
             }
             isLoading = false
         }
     }
 
-    // Load landlord's properties on first composition
+    // Load landlord's properties and bookings count on first composition
     LaunchedEffect(Unit) {
         scope.launch {
             isLoading = true
@@ -68,10 +76,18 @@ fun LandlordHomeScreen(
                     landlordName = "${landlordInfo.firstName} ${landlordInfo.lastName}"
                     landlordId = landlordInfo.landlordId
                     properties = propertyRepository.getPropertiesByLandlordId(landlordInfo.landlordId)
+                    pendingBookingsCount = bookingRepository.countPendingBookingsForLandlord(landlordInfo.landlordId)
                 }
             }
 
             isLoading = false
+        }
+    }
+
+    // Refresh pending bookings count when returning to home
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 0 && landlordId != null) {
+            pendingBookingsCount = bookingRepository.countPendingBookingsForLandlord(landlordId!!)
         }
     }
 
@@ -92,13 +108,6 @@ fun LandlordHomeScreen(
                     }
                 },
                 actions = {
-                    // Add bookings button
-                    IconButton(onClick = onBookingsClick) {
-                        Icon(
-                            Icons.Filled.DateRange,
-                            contentDescription = "Booking Requests"
-                        )
-                    }
                     IconButton(onClick = onProfileClick) {
                         Icon(Icons.Filled.Person, contentDescription = "Profile")
                     }
@@ -108,8 +117,42 @@ fun LandlordHomeScreen(
                 }
             )
         },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                    label = { Text("Home") },
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 }
+                )
+                NavigationBarItem(
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (pendingBookingsCount > 0) {
+                                    Badge {
+                                        Text(
+                                            text = pendingBookingsCount.toString(),
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.DateRange, contentDescription = "Bookings")
+                        }
+                    },
+                    label = { Text("Bookings") },
+                    selected = selectedTab == 1,
+                    onClick = {
+                        selectedTab = 1
+                        onBookingsClick()
+                    }
+                )
+            }
+        },
         floatingActionButton = {
-            if (properties.isNotEmpty()) {
+            if (properties.isNotEmpty() && selectedTab == 0) {
                 FloatingActionButton(
                     onClick = onAddProperty,
                     containerColor = MaterialTheme.colorScheme.primary
@@ -173,13 +216,16 @@ fun LandlordHomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "€${properties.sumOf { it.pricePerMonth.toInt() }}",
+                            text = pendingBookingsCount.toString(),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = if (pendingBookingsCount > 0)
+                                MaterialTheme.colorScheme.error
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "Total Monthly",
+                            text = "Pending",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -187,12 +233,34 @@ fun LandlordHomeScreen(
             }
 
             // Section Header
-            Text(
-                text = "Your Properties",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Your Properties",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                if (pendingBookingsCount > 0) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = "$pendingBookingsCount new booking${if (pendingBookingsCount > 1) "s" else ""}",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
 
             if (isLoading) {
                 Box(
@@ -246,7 +314,7 @@ fun LandlordHomeScreen(
                         LandlordPropertyCard(
                             property = property,
                             onClick = { onPropertyClick(property.propertyId) },
-                            onEditClick = { onEditProperty(property.propertyId) },  // Add this
+                            onEditClick = { onEditProperty(property.propertyId) },
                             onToggleStatus = {
                                 // Check if trying to deactivate a property before its availability date
                                 val today = Date()
@@ -332,12 +400,13 @@ fun LandlordHomeScreen(
     }
 }
 
+// LandlordPropertyCard remains the same as before
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandlordPropertyCard(
     property: Property,
     onClick: () -> Unit,
-    onEditClick: () -> Unit,  // Add this parameter
+    onEditClick: () -> Unit,
     onToggleStatus: () -> Unit
 ) {
     Card(

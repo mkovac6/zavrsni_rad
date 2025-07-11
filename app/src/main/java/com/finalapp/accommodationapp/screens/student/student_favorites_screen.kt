@@ -24,7 +24,9 @@ import java.util.*
 @Composable
 fun StudentFavoritesScreen(
     onNavigateBack: () -> Unit,
-    onPropertyClick: (Int) -> Unit
+    onPropertyClick: (Int) -> Unit,
+    onHomeClick: () -> Unit,
+    onBookingsClick: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val favoritesRepository = remember { FavoritesRepository() }
@@ -45,8 +47,7 @@ fun StudentFavoritesScreen(
 
             if (studentProfile != null) {
                 studentId = studentProfile.studentId
-                favoriteProperties =
-                    favoritesRepository.getStudentFavorites(studentProfile.studentId)
+                favoriteProperties = favoritesRepository.getStudentFavorites(studentProfile.studentId)
             }
 
             isLoading = false
@@ -56,13 +57,30 @@ fun StudentFavoritesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Favorites") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back")
-                    }
-                }
+                title = { Text("My Favorites") }
             )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                    label = { Text("Home") },
+                    selected = false,
+                    onClick = onHomeClick
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.DateRange, contentDescription = "Bookings") },
+                    label = { Text("Bookings") },
+                    selected = false,
+                    onClick = onBookingsClick
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Favorite, contentDescription = "Favorites") },
+                    label = { Text("Favorites") },
+                    selected = true,
+                    onClick = { }
+                )
+            }
         }
     ) { paddingValues ->
         if (isLoading) {
@@ -123,8 +141,7 @@ fun StudentFavoritesScreen(
                                     property.propertyId
                                 )
                                 if (removed) {
-                                    favoriteProperties =
-                                        favoriteProperties.filter { it.propertyId != property.propertyId }
+                                    favoriteProperties = favoriteProperties.filter { it.propertyId != property.propertyId }
                                 }
                             }
                         }

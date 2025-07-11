@@ -23,33 +23,35 @@ import java.util.*
 @Composable
 fun StudentBookingsScreen(
     onNavigateBack: () -> Unit,
-    onPropertyClick: (Int) -> Unit
+    onPropertyClick: (Int) -> Unit,
+    onHomeClick: () -> Unit,
+    onFavoritesClick: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val bookingRepository = remember { BookingRepository() }
     val studentRepository = remember { StudentRepository() }
-    
+
     var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var selectedTab by remember { mutableStateOf(0) }
-    
+
     // Load bookings
     LaunchedEffect(Unit) {
         coroutineScope.launch {
             isLoading = true
-            
+
             // Get student ID
             val userId = UserSession.currentUser?.userId ?: 0
             val studentProfile = studentRepository.getStudentProfile(userId)
-            
+
             if (studentProfile != null) {
                 bookings = bookingRepository.getStudentBookings(studentProfile.studentId)
             }
-            
+
             isLoading = false
         }
     }
-    
+
     // Filter bookings by status
     val filteredBookings = when (selectedTab) {
         0 -> bookings // All
@@ -58,17 +60,34 @@ fun StudentBookingsScreen(
         3 -> bookings.filter { it.status in listOf("rejected", "cancelled") }
         else -> bookings
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Bookings") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back")
-                    }
-                }
+                title = { Text("My Bookings") }
             )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                    label = { Text("Home") },
+                    selected = false,
+                    onClick = onHomeClick
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.DateRange, contentDescription = "Bookings") },
+                    label = { Text("Bookings") },
+                    selected = true,
+                    onClick = { }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Favorite, contentDescription = "Favorites") },
+                    label = { Text("Favorites") },
+                    selected = false,
+                    onClick = onFavoritesClick
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -99,7 +118,7 @@ fun StudentBookingsScreen(
                     text = { Text("Rejected") }
                 )
             }
-            
+
             if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -155,7 +174,7 @@ fun BookingCard(
     onPropertyClick: () -> Unit
 ) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-    
+
     Card(
         onClick = onPropertyClick,
         modifier = Modifier.fillMaxWidth(),
@@ -184,12 +203,12 @@ fun BookingCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
+
                 StatusBadge(status = booking.status)
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             // Dates
             Row(
                 verticalAlignment = Alignment.CenterVertically
@@ -206,7 +225,7 @@ fun BookingCard(
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
-            
+
             // Price
             Row(
                 verticalAlignment = Alignment.CenterVertically
@@ -223,7 +242,7 @@ fun BookingCard(
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
-            
+
             // Landlord
             booking.landlordName?.let { landlord ->
                 Row(
@@ -243,7 +262,7 @@ fun BookingCard(
                     )
                 }
             }
-            
+
             // Booking date
             booking.createdAt?.let { created ->
                 Text(
@@ -285,7 +304,7 @@ fun StatusBadge(status: String) {
             Icons.Filled.Info
         )
     }
-    
+
     Surface(
         color = containerColor,
         shape = MaterialTheme.shapes.small

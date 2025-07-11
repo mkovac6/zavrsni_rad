@@ -1,6 +1,7 @@
 package com.finalapp.accommodationapp.data.repository.student
 
 import android.util.Log
+import android.util.Log.e
 import com.finalapp.accommodationapp.data.DatabaseConnection
 import com.finalapp.accommodationapp.data.model.Booking
 import kotlinx.coroutines.Dispatchers
@@ -187,6 +188,36 @@ class BookingRepository {
         } catch (e: Exception) {
             Log.e(TAG, "Error updating booking status", e)
             false
+        }
+    }
+
+    suspend fun countPendingBookingsForLandlord(landlordId: Int): Int = withContext(Dispatchers.IO){
+        try {
+            val connection = DatabaseConnection.getConnection()
+            val query = """
+            SELECT COUNT(*) as count
+            FROM Bookings b
+            JOIN Properties p ON b.property_id = p.property_id
+            WHERE p.landlord_id = ? AND b.status = 'pending'
+        """.trimIndent()
+
+            val preparedStatement = connection?.prepareStatement(query)
+            preparedStatement?.setInt(1, landlordId)
+            val resultSet = preparedStatement?.executeQuery()
+
+            val count = if (resultSet?.next() == true) {
+                resultSet.getInt("count")
+            } else 0
+
+            resultSet?.close()
+            preparedStatement?.close()
+            connection?.close()
+
+            Log.d(TAG, "Landlord $landlordId has $count pending bookings")
+            count
+        } catch (e: Exception) {
+            e(TAG, "Error counting pending bookings", e)
+            0
         }
     }
 
