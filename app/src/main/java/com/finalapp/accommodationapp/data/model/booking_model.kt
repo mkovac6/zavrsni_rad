@@ -6,8 +6,8 @@ data class Booking(
     val bookingId: Int = 0,
     val propertyId: Int,
     val studentId: Int,
-    val startDate: Date,
-    val endDate: Date,
+    val startDate: Date?,
+    val endDate: Date?,
     val status: String, // pending, approved, rejected, cancelled, completed
     val totalPrice: Double,
     val messageToLandlord: String? = null,

@@ -1,218 +1,190 @@
 package com.finalapp.accommodationapp.data.repository.admin
 
 import android.util.Log
-import com.finalapp.accommodationapp.data.DatabaseConnection
+import com.finalapp.accommodationapp.data.SupabaseClient
 import com.finalapp.accommodationapp.data.model.admin.StudentWithUser
 import com.finalapp.accommodationapp.data.model.admin.LandlordWithUser
 import com.finalapp.accommodationapp.data.model.admin.Amenity
+import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.sql.Date
-import java.sql.Statement
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 class AdminRepository {
     companion object {
         private const val TAG = "AdminRepository"
     }
 
+    private val supabase = SupabaseClient.client
+
     // Student Management
     suspend fun getAllStudents(): List<StudentWithUser> = withContext(Dispatchers.IO) {
-        val students = mutableListOf<StudentWithUser>()
-
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-                SELECT 
-                    s.*,
-                    u.email,
-                    u.is_profile_complete,
-                    uni.name as university_name
-                FROM Students s
-                JOIN Users u ON s.user_id = u.user_id
-                JOIN Universities uni ON s.university_id = uni.university_id
-                ORDER BY s.created_at DESC
-            """.trimIndent()
+            val result = supabase.from("students")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("""
+                    *,
+                    users!inner(email, is_profile_complete),
+                    universities!inner(name)
+                """.trimIndent()))
+                .decodeList<StudentDto>()
 
-            val statement = connection?.createStatement()
-            val resultSet = statement?.executeQuery(query)
-
-            while (resultSet?.next() == true) {
-                val student = StudentWithUser(
-                    studentId = resultSet.getInt("student_id"),
-                    userId = resultSet.getInt("user_id"),
-                    email = resultSet.getString("email"),
-                    firstName = resultSet.getString("first_name"),
-                    lastName = resultSet.getString("last_name"),
-                    phone = resultSet.getString("phone"),
-                    studentNumber = resultSet.getString("student_number"),
-                    yearOfStudy = resultSet.getInt("year_of_study"),
-                    program = resultSet.getString("program"),
-                    universityName = resultSet.getString("university_name"),
-                    isProfileComplete = resultSet.getBoolean("is_profile_complete")
+            result.map { dto ->
+                StudentWithUser(
+                    studentId = dto.student_id,
+                    userId = dto.user_id,
+                    email = dto.users?.email ?: "",
+                    firstName = dto.first_name,
+                    lastName = dto.last_name,
+                    phone = dto.phone,
+                    studentNumber = dto.student_number,
+                    yearOfStudy = dto.year_of_study ?: 0,
+                    program = dto.program,
+                    universityName = dto.universities?.name ?: "",
+                    isProfileComplete = dto.users?.is_profile_complete ?: false
                 )
-                students.add(student)
+            }.also {
+                Log.d(TAG, "Loaded ${it.size} students")
             }
-
-            resultSet?.close()
-            statement?.close()
-            connection?.close()
-
-            Log.d(TAG, "Loaded ${students.size} students")
         } catch (e: Exception) {
             Log.e(TAG, "Error loading students", e)
+            emptyList()
         }
-
-        students
     }
 
     suspend fun deleteStudent(userId: Int): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            connection?.autoCommit = false
+            // Delete from students first (cascade should handle this)
+            supabase.from("students")
+                .delete {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                }
 
-            try {
-                // Delete from Students table first (due to foreign key)
-                val deleteStudentQuery = "DELETE FROM Students WHERE user_id = ?"
-                val studentStatement = connection?.prepareStatement(deleteStudentQuery)
-                studentStatement?.setInt(1, userId)
-                studentStatement?.executeUpdate()
+            // Delete from users
+            supabase.from("users")
+                .delete {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                }
 
-                // Delete from Users table
-                val deleteUserQuery = "DELETE FROM Users WHERE user_id = ?"
-                val userStatement = connection?.prepareStatement(deleteUserQuery)
-                userStatement?.setInt(1, userId)
-                userStatement?.executeUpdate()
-
-                connection?.commit()
-
-                studentStatement?.close()
-                userStatement?.close()
-                connection?.close()
-
-                Log.d(TAG, "Deleted student with userId: $userId")
-                true
-            } catch (e: Exception) {
-                connection?.rollback()
-                Log.e(TAG, "Error deleting student", e)
-                false
-            }
+            Log.d(TAG, "Deleted student with userId: $userId")
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting connection", e)
+            Log.e(TAG, "Error deleting student", e)
             false
         }
     }
 
     // Landlord Management
     suspend fun getAllLandlords(): List<LandlordWithUser> = withContext(Dispatchers.IO) {
-        val landlords = mutableListOf<LandlordWithUser>()
-
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-                SELECT 
-                    l.*,
-                    u.email,
-                    u.is_profile_complete,
-                    (SELECT COUNT(*) FROM Properties WHERE landlord_id = l.landlord_id) as property_count
-                FROM Landlords l
-                JOIN Users u ON l.user_id = u.user_id
-                ORDER BY l.created_at DESC
-            """.trimIndent()
+            val landlords = supabase.from("landlords")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("""
+                    *,
+                    users!inner(email, is_profile_complete)
+                """.trimIndent()))
+                .decodeList<LandlordDto>()
 
-            val statement = connection?.createStatement()
-            val resultSet = statement?.executeQuery(query)
-
-            while (resultSet?.next() == true) {
-                val landlord = LandlordWithUser(
-                    landlordId = resultSet.getInt("landlord_id"),
-                    userId = resultSet.getInt("user_id"),
-                    email = resultSet.getString("email"),
-                    firstName = resultSet.getString("first_name"),
-                    lastName = resultSet.getString("last_name"),
-                    companyName = resultSet.getString("company_name"),
-                    phone = resultSet.getString("phone"),
-                    isVerified = resultSet.getBoolean("is_verified"),
-                    rating = resultSet.getDouble("rating"),
-                    propertyCount = resultSet.getInt("property_count")
-                )
-                landlords.add(landlord)
+            // Get property counts separately
+            val propertyCountsMap = mutableMapOf<Int, Int>()
+            landlords.forEach { landlord ->
+                val count = supabase.from("properties")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("property_id")) {
+                        filter {
+                            eq("landlord_id", landlord.landlord_id)
+                        }
+                    }
+                    .decodeList<PropertyIdDto>()
+                    .size
+                propertyCountsMap[landlord.landlord_id] = count
             }
 
-            resultSet?.close()
-            statement?.close()
-            connection?.close()
-
-            Log.d(TAG, "Loaded ${landlords.size} landlords")
+            landlords.map { dto ->
+                LandlordWithUser(
+                    landlordId = dto.landlord_id,
+                    userId = dto.user_id,
+                    email = dto.users?.email ?: "",
+                    firstName = dto.first_name,
+                    lastName = dto.last_name,
+                    companyName = dto.company_name,
+                    phone = dto.phone,
+                    isVerified = dto.is_verified ?: false,
+                    rating = dto.rating ?: 0.0,
+                    propertyCount = propertyCountsMap[dto.landlord_id] ?: 0
+                )
+            }.also {
+                Log.d(TAG, "Loaded ${it.size} landlords")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading landlords", e)
+            emptyList()
         }
-
-        landlords
     }
 
     suspend fun deleteLandlord(userId: Int): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            connection?.autoCommit = false
+            // Get landlord_id first
+            val landlordResult = supabase.from("landlords")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("landlord_id")) {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                }
+                .decodeSingleOrNull<LandlordIdDto>()
 
-            try {
-                // First, get the landlord_id
-                val getLandlordIdQuery = "SELECT landlord_id FROM Landlords WHERE user_id = ?"
-                val prepStatement = connection?.prepareStatement(getLandlordIdQuery)
-                prepStatement?.setInt(1, userId)
-                val resultSet = prepStatement?.executeQuery()
+            landlordResult?.let { landlord ->
+                // Delete property amenities for this landlord's properties
+                val properties = supabase.from("properties")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("property_id")) {
+                        filter {
+                            eq("landlord_id", landlord.landlord_id)
+                        }
+                    }
+                    .decodeList<PropertyIdDto>()
 
-                if (resultSet?.next() == true) {
-                    val landlordId = resultSet.getInt("landlord_id")
-
-                    // Delete all property amenities for this landlord's properties
-                    val deleteAmenitiesQuery = """
-                        DELETE FROM PropertyAmenities 
-                        WHERE property_id IN (SELECT property_id FROM Properties WHERE landlord_id = ?)
-                    """.trimIndent()
-                    val amenitiesStatement = connection.prepareStatement(deleteAmenitiesQuery)
-                    amenitiesStatement.setInt(1, landlordId)
-                    amenitiesStatement.executeUpdate()
-
-                    // Delete all properties
-                    val deletePropertiesQuery = "DELETE FROM Properties WHERE landlord_id = ?"
-                    val propertiesStatement = connection.prepareStatement(deletePropertiesQuery)
-                    propertiesStatement.setInt(1, landlordId)
-                    propertiesStatement.executeUpdate()
-
-                    // Delete landlord
-                    val deleteLandlordQuery = "DELETE FROM Landlords WHERE user_id = ?"
-                    val landlordStatement = connection.prepareStatement(deleteLandlordQuery)
-                    landlordStatement.setInt(1, userId)
-                    landlordStatement.executeUpdate()
-
-                    // Delete user
-                    val deleteUserQuery = "DELETE FROM Users WHERE user_id = ?"
-                    val userStatement = connection.prepareStatement(deleteUserQuery)
-                    userStatement.setInt(1, userId)
-                    userStatement.executeUpdate()
-
-                    connection.commit()
-
-                    amenitiesStatement.close()
-                    propertiesStatement.close()
-                    landlordStatement.close()
-                    userStatement.close()
+                properties.forEach { property ->
+                    supabase.from("propertyamenities")
+                        .delete {
+                            filter {
+                                eq("property_id", property.property_id)
+                            }
+                        }
                 }
 
-                resultSet?.close()
-                prepStatement?.close()
-                connection?.close()
+                // Delete properties
+                supabase.from("properties")
+                    .delete {
+                        filter {
+                            eq("landlord_id", landlord.landlord_id)
+                        }
+                    }
 
-                Log.d(TAG, "Deleted landlord with userId: $userId")
-                true
-            } catch (e: Exception) {
-                connection?.rollback()
-                Log.e(TAG, "Error deleting landlord", e)
-                false
+                // Delete landlord
+                supabase.from("landlords")
+                    .delete {
+                        filter {
+                            eq("user_id", userId)
+                        }
+                    }
+
+                // Delete user
+                supabase.from("users")
+                    .delete {
+                        filter {
+                            eq("user_id", userId)
+                        }
+                    }
             }
+
+            Log.d(TAG, "Deleted landlord with userId: $userId")
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting connection", e)
+            Log.e(TAG, "Error deleting landlord", e)
             false
         }
     }
@@ -227,32 +199,21 @@ class AdminRepository {
         rating: Double = 0.0
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-                INSERT INTO Landlords (
-                    user_id, first_name, last_name, company_name, 
-                    phone, is_verified, rating
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent()
-
-            val statement = connection?.prepareStatement(query)
-            statement?.apply {
-                setInt(1, userId)
-                setString(2, firstName)
-                setString(3, lastName)
-                setString(4, companyName)
-                setString(5, phone)
-                setBoolean(6, isVerified)
-                setDouble(7, rating)
+            val newLandlord = buildJsonObject {
+                put("user_id", userId)
+                put("first_name", firstName)
+                put("last_name", lastName)
+                put("company_name", companyName)
+                put("phone", phone)
+                put("is_verified", isVerified)
+                put("rating", rating)
             }
 
-            val rowsAffected = statement?.executeUpdate() ?: 0
-
-            statement?.close()
-            connection?.close()
+            supabase.from("landlords")
+                .insert(newLandlord)
 
             Log.d(TAG, "Created landlord profile for userId: $userId")
-            rowsAffected > 0
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Error creating landlord profile", e)
             false
@@ -262,37 +223,26 @@ class AdminRepository {
     // Property Management
     suspend fun deleteProperty(propertyId: Int): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            connection?.autoCommit = false
+            // Delete amenities first
+            supabase.from("propertyamenities")
+                .delete {
+                    filter {
+                        eq("property_id", propertyId)
+                    }
+                }
 
-            try {
-                // Delete property amenities
-                val deleteAmenitiesQuery = "DELETE FROM PropertyAmenities WHERE property_id = ?"
-                val amenitiesStatement = connection?.prepareStatement(deleteAmenitiesQuery)
-                amenitiesStatement?.setInt(1, propertyId)
-                amenitiesStatement?.executeUpdate()
+            // Delete property
+            supabase.from("properties")
+                .delete {
+                    filter {
+                        eq("property_id", propertyId)
+                    }
+                }
 
-                // Delete property
-                val deletePropertyQuery = "DELETE FROM Properties WHERE property_id = ?"
-                val propertyStatement = connection?.prepareStatement(deletePropertyQuery)
-                propertyStatement?.setInt(1, propertyId)
-                propertyStatement?.executeUpdate()
-
-                connection?.commit()
-
-                amenitiesStatement?.close()
-                propertyStatement?.close()
-                connection?.close()
-
-                Log.d(TAG, "Deleted property with id: $propertyId")
-                true
-            } catch (e: Exception) {
-                connection?.rollback()
-                Log.e(TAG, "Error deleting property", e)
-                false
-            }
+            Log.d(TAG, "Deleted property with id: $propertyId")
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting connection", e)
+            Log.e(TAG, "Error deleting property", e)
             false
         }
     }
@@ -312,48 +262,30 @@ class AdminRepository {
         availableFrom: String
     ): Int = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-                INSERT INTO Properties (
-                    landlord_id, title, description, property_type,
-                    address, city, postal_code, price_per_month,
-                    bedrooms, bathrooms, total_capacity, available_from,
-                    is_active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-            """.trimIndent()
-
-            val statement = connection?.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)
-            statement?.apply {
-                setInt(1, landlordId)
-                setString(2, title)
-                setString(3, description)
-                setString(4, propertyType)
-                setString(5, address)
-                setString(6, city)
-                setString(7, postalCode)
-                setDouble(8, pricePerMonth)
-                setInt(9, bedrooms)
-                setInt(10, bathrooms)
-                setInt(11, totalCapacity)
-                setDate(12, Date.valueOf(availableFrom))
+            val newProperty = buildJsonObject {
+                put("landlord_id", landlordId)
+                put("title", title)
+                put("description", description)
+                put("property_type", propertyType)
+                put("address", address)
+                put("city", city)
+                put("postal_code", postalCode)
+                put("price_per_month", pricePerMonth)
+                put("bedrooms", bedrooms)
+                put("bathrooms", bathrooms)
+                put("total_capacity", totalCapacity)
+                put("available_from", availableFrom)
+                put("is_active", true)
             }
 
-            statement?.executeUpdate()
+            val result = supabase.from("properties")
+                .insert(newProperty) {
+                    select()
+                }
+                .decodeSingle<PropertyIdDto>()
 
-            // Get the generated property ID
-            val generatedKeys = statement?.generatedKeys
-            val propertyId = if (generatedKeys?.next() == true) {
-                generatedKeys.getInt(1)
-            } else {
-                0
-            }
-
-            generatedKeys?.close()
-            statement?.close()
-            connection?.close()
-
-            Log.d(TAG, "Created property with ID: $propertyId")
-            propertyId
+            Log.d(TAG, "Created property with ID: ${result.property_id}")
+            result.property_id
         } catch (e: Exception) {
             Log.e(TAG, "Error creating property", e)
             0
@@ -362,22 +294,15 @@ class AdminRepository {
 
     suspend fun addPropertyAmenities(propertyId: Int, amenityIds: List<Int>): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = "INSERT INTO PropertyAmenities (property_id, amenity_id) VALUES (?, ?)"
-            val statement = connection?.prepareStatement(query)
-
-            amenityIds.forEach { amenityId ->
-                statement?.apply {
-                    setInt(1, propertyId)
-                    setInt(2, amenityId)
-                    addBatch()
+            val amenities = amenityIds.map { amenityId ->
+                buildJsonObject {
+                    put("property_id", propertyId)
+                    put("amenity_id", amenityId)
                 }
             }
 
-            statement?.executeBatch()
-
-            statement?.close()
-            connection?.close()
+            supabase.from("propertyamenities")
+                .insert(amenities)
 
             Log.d(TAG, "Added ${amenityIds.size} amenities to property $propertyId")
             true
@@ -390,31 +315,30 @@ class AdminRepository {
     // University Management
     suspend fun deleteUniversity(universityId: Int): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-
             // Check if any students are enrolled
-            val checkQuery = "SELECT COUNT(*) as count FROM Students WHERE university_id = ?"
-            val checkStatement = connection?.prepareStatement(checkQuery)
-            checkStatement?.setInt(1, universityId)
-            val resultSet = checkStatement?.executeQuery()
+            val students = supabase.from("students")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("student_id")) {
+                    filter {
+                        eq("university_id", universityId)
+                    }
+                }
+                .decodeList<StudentIdDto>()
 
-            if (resultSet?.next() == true && resultSet.getInt("count") > 0) {
+            if (students.isNotEmpty()) {
                 Log.w(TAG, "Cannot delete university with enrolled students")
-                false
-            } else {
-                // Safe to delete
-                val deleteQuery = "DELETE FROM Universities WHERE university_id = ?"
-                val deleteStatement = connection?.prepareStatement(deleteQuery)
-                deleteStatement?.setInt(1, universityId)
-                val rowsAffected = deleteStatement?.executeUpdate() ?: 0
-
-                deleteStatement?.close()
-                checkStatement?.close()
-                connection?.close()
-
-                Log.d(TAG, "Deleted university with id: $universityId")
-                rowsAffected > 0
+                return@withContext false
             }
+
+            // Safe to delete
+            supabase.from("universities")
+                .delete {
+                    filter {
+                        eq("university_id", universityId)
+                    }
+                }
+
+            Log.d(TAG, "Deleted university with id: $universityId")
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Error deleting university", e)
             false
@@ -423,23 +347,18 @@ class AdminRepository {
 
     suspend fun addUniversity(name: String, city: String, country: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = "INSERT INTO Universities (name, city, country, is_active) VALUES (?, ?, ?, 1)"
-            val statement = connection?.prepareStatement(query)
-
-            statement?.apply {
-                setString(1, name)
-                setString(2, city)
-                setString(3, country)
+            val newUniversity = buildJsonObject {
+                put("name", name)
+                put("city", city)
+                put("country", country)
+                put("is_active", true)
             }
 
-            val rowsAffected = statement?.executeUpdate() ?: 0
-
-            statement?.close()
-            connection?.close()
+            supabase.from("universities")
+                .insert(newUniversity)
 
             Log.d(TAG, "Added new university: $name")
-            rowsAffected > 0
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Error adding university", e)
             false
@@ -449,29 +368,25 @@ class AdminRepository {
     // Utility functions
     suspend fun updateUserProfileStatus(userId: Int, isComplete: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = "UPDATE Users SET is_profile_complete = ? WHERE user_id = ?"
-            val statement = connection?.prepareStatement(query)
-
-            statement?.apply {
-                setBoolean(1, isComplete)
-                setInt(2, userId)
+            val update = buildJsonObject {
+                put("is_profile_complete", isComplete)
             }
 
-            val rowsAffected = statement?.executeUpdate() ?: 0
-
-            statement?.close()
-            connection?.close()
+            supabase.from("users")
+                .update(update) {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                }
 
             Log.d(TAG, "Updated profile status for userId: $userId")
-            rowsAffected > 0
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Error updating profile status", e)
             false
         }
     }
 
-    // Add this method to AdminRepository.kt:
     suspend fun createLandlordWithAccount(
         email: String,
         password: String,
@@ -483,92 +398,136 @@ class AdminRepository {
         rating: Double = 0.0
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            connection?.autoCommit = false
-
-            try {
-                // First create the user account
-                val userQuery = "INSERT INTO Users (email, password_hash, user_type, is_profile_complete) VALUES (?, ?, 'landlord', 1)"
-                val userStatement = connection?.prepareStatement(userQuery, Statement.RETURN_GENERATED_KEYS)
-                userStatement?.setString(1, email)
-                userStatement?.setString(2, password)
-                userStatement?.executeUpdate()
-
-                // Get the generated user ID
-                val generatedKeys = userStatement?.generatedKeys
-                val userId = if (generatedKeys?.next() == true) {
-                    generatedKeys.getInt(1)
-                } else {
-                    throw Exception("Failed to get user ID")
-                }
-
-                // Create the landlord profile
-                val landlordQuery = """
-                INSERT INTO Landlords (
-                    user_id, first_name, last_name, company_name, 
-                    phone, is_verified, rating
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent()
-
-                val landlordStatement = connection?.prepareStatement(landlordQuery)
-                landlordStatement?.apply {
-                    setInt(1, userId)
-                    setString(2, firstName)
-                    setString(3, lastName)
-                    setString(4, companyName)
-                    setString(5, phone)
-                    setBoolean(6, isVerified)
-                    setDouble(7, rating)
-                }
-                landlordStatement?.executeUpdate()
-
-                connection?.commit()
-
-                generatedKeys?.close()
-                userStatement?.close()
-                landlordStatement?.close()
-                connection?.close()
-
-                Log.d(TAG, "Created landlord with userId: $userId")
-                true
-            } catch (e: Exception) {
-                connection?.rollback()
-                Log.e(TAG, "Error creating landlord with account", e)
-                false
+            // Create user account
+            val newUser = buildJsonObject {
+                put("email", email)
+                put("password_hash", password) // Should be hashed!
+                put("user_type", "landlord")
+                put("is_profile_complete", true)
             }
+
+            val userResult = supabase.from("users")
+                .insert(newUser) {
+                    select()
+                }
+                .decodeSingle<UserIdDto>()
+
+            // Create landlord profile
+            val newLandlord = buildJsonObject {
+                put("user_id", userResult.user_id)
+                put("first_name", firstName)
+                put("last_name", lastName)
+                put("company_name", companyName)
+                put("phone", phone)
+                put("is_verified", isVerified)
+                put("rating", rating)
+            }
+
+            supabase.from("landlords")
+                .insert(newLandlord)
+
+            Log.d(TAG, "Created landlord with userId: ${userResult.user_id}")
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting connection", e)
+            Log.e(TAG, "Error creating landlord with account", e)
             false
         }
     }
 
     suspend fun getAllAmenities(): List<Amenity> = withContext(Dispatchers.IO) {
-        val amenities = mutableListOf<Amenity>()
-
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = "SELECT * FROM Amenities ORDER BY name"
-            val statement = connection?.createStatement()
-            val resultSet = statement?.executeQuery(query)
+            val result = supabase.from("amenities")
+                .select()
+                .decodeList<AmenityDto>()
 
-            while (resultSet?.next() == true) {
-                val amenity = Amenity(
-                    amenityId = resultSet.getInt("amenity_id"),
-                    name = resultSet.getString("name"),
-                    category = resultSet.getString("category")
+            result.map { dto ->
+                Amenity(
+                    amenityId = dto.amenity_id,
+                    name = dto.name,
+                    category = dto.category
                 )
-                amenities.add(amenity)
+            }.sortedBy { it.name }.also {
+                Log.d(TAG, "Loaded ${it.size} amenities")
             }
-
-            resultSet?.close()
-            statement?.close()
-            connection?.close()
-
-            Log.d(TAG, "Loaded ${amenities.size} amenities")
         } catch (e: Exception) {
             Log.e(TAG, "Error loading amenities", e)
+            emptyList()
         }
-
-        amenities
     }
 }
+
+// DTOs for Supabase
+@Serializable
+data class StudentDto(
+    val student_id: Int,
+    val user_id: Int,
+    val first_name: String,
+    val last_name: String,
+    val phone: String,
+    val student_number: String? = null,
+    val year_of_study: Int? = null,
+    val program: String? = null,
+    val users: UserInfoDto? = null,
+    val universities: UniversityNameDto? = null
+)
+
+@Serializable
+data class LandlordDto(
+    val landlord_id: Int,
+    val user_id: Int,
+    val first_name: String,
+    val last_name: String,
+    val company_name: String? = null,
+    val phone: String,
+    val is_verified: Boolean? = false,
+    val rating: Double? = null,
+    val users: UserInfoDto? = null
+)
+
+@Serializable
+data class UserInfoDto(
+    val email: String,
+    val is_profile_complete: Boolean
+)
+
+@Serializable
+data class UniversityNameDto(val name: String)
+
+@Serializable
+data class PropertyIdDto(
+    val property_id: Int,
+    val landlord_id: Int? = null,
+    val title: String? = null,
+    val description: String? = null,
+    val property_type: String? = null,
+    val address: String? = null,
+    val city: String? = null,
+    val postal_code: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val price_per_month: Double? = null,
+    val bedrooms: Int? = null,
+    val bathrooms: Int? = null,
+    val total_capacity: Int? = null,
+    val available_from: String? = null,
+    val available_to: String? = null,
+    val is_active: Boolean? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null
+)
+
+@Serializable
+data class LandlordIdDto(val landlord_id: Int)
+
+@Serializable
+data class StudentIdDto(val student_id: Int)
+
+@Serializable
+data class UserIdDto(val user_id: Int)
+
+@Serializable
+data class AmenityDto(
+    val amenity_id: Int,
+    val name: String,
+    val category: String? = null
+)

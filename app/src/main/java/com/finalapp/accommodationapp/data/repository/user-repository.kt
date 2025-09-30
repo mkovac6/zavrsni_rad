@@ -1,62 +1,87 @@
 package com.finalapp.accommodationapp.data.repository
 
 import android.util.Log
-import com.finalapp.accommodationapp.data.DatabaseConnection
+import com.finalapp.accommodationapp.data.SupabaseClient
 import com.finalapp.accommodationapp.data.model.User
 import com.finalapp.accommodationapp.data.UserSession
+import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 class UserRepository {
     companion object {
         private const val TAG = "UserRepository"
     }
 
+    private val supabase = SupabaseClient.client
+
     suspend fun login(email: String, password: String): User? = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-                SELECT u.user_id, u.email, u.user_type, u.is_profile_complete,
-                       s.first_name as student_first_name, 
-                       l.first_name as landlord_first_name
-                FROM Users u
-                LEFT JOIN Students s ON u.user_id = s.user_id
-                LEFT JOIN Landlords l ON u.user_id = l.user_id
-                WHERE u.email = ? AND u.password_hash = ?
-            """.trimIndent()
+            // Query users table - password_hash won't be returned for security
+            val userResult = supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("user_id", "email", "user_type", "is_profile_complete")) {
+                    filter {
+                        eq("email", email)
+                        eq("password_hash", password) // This filters but doesn't return the password
+                    }
+                }
+                .decodeSingleOrNull<SimpleUserDto>()
 
-            val preparedStatement = connection?.prepareStatement(query)
-            preparedStatement?.setString(1, email)
-            preparedStatement?.setString(2, password) // In production, this should be hashed!
-
-            val resultSet = preparedStatement?.executeQuery()
-
-            var user: User? = null
-            if (resultSet?.next() == true) {
-                val firstName = resultSet.getString("student_first_name")
-                    ?: resultSet.getString("landlord_first_name")
-                    ?: "User"
-
-                user = User(
-                    userId = resultSet.getInt("user_id"),
-                    email = resultSet.getString("email"),
-                    userType = resultSet.getString("user_type"),
-                    isProfileComplete = resultSet.getBoolean("is_profile_complete"),
-                    firstName = firstName
-                )
-                Log.d(TAG, "Login successful for: ${user.email}")
-
-                // Save user to session
-                UserSession.setUser(user)
-            } else {
-                Log.d(TAG, "Login failed: Invalid credentials")
+            if (userResult == null) {
+                Log.d(TAG, "Login failed: Invalid credentials for $email")
+                return@withContext null
             }
 
-            resultSet?.close()
-            preparedStatement?.close()
-            connection?.close()
+            // Get the first name based on user type
+            val firstName = when (userResult.user_type) {
+                "student" -> {
+                    try {
+                        val student = supabase.from("students")
+                            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("first_name")) {
+                                filter {
+                                    eq("user_id", userResult.user_id)
+                                }
+                            }
+                            .decodeSingleOrNull<FirstNameDto>()
+                        student?.first_name ?: "User"
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error fetching student name: ${e.message}")
+                        "User"
+                    }
+                }
+                "landlord" -> {
+                    try {
+                        val landlord = supabase.from("landlords")
+                            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("first_name")) {
+                                filter {
+                                    eq("user_id", userResult.user_id)
+                                }
+                            }
+                            .decodeSingleOrNull<FirstNameDto>()
+                        landlord?.first_name ?: "User"
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error fetching landlord name: ${e.message}")
+                        "User"
+                    }
+                }
+                else -> "User"
+            }
 
+            val user = User(
+                userId = userResult.user_id,
+                email = userResult.email,
+                userType = userResult.user_type,
+                isProfileComplete = userResult.is_profile_complete,
+                firstName = firstName
+            )
+
+            Log.d(TAG, "Login successful for: ${user.email} (${user.userType})")
+            UserSession.setUser(user)
             user
+
         } catch (e: Exception) {
             Log.e(TAG, "Login error: ${e.message}", e)
             null
@@ -66,54 +91,46 @@ class UserRepository {
     suspend fun register(email: String, password: String, userType: String = "student"): User? =
         withContext(Dispatchers.IO) {
             try {
-                val connection = DatabaseConnection.getConnection()
+                // Check if email exists
+                val existing = supabase.from("users")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("user_id")) {
+                        filter {
+                            eq("email", email)
+                        }
+                    }
+                    .decodeList<UserIdDto>()
 
-                // First check if email already exists
-                if (checkEmailExists(email)) {
+                if (existing.isNotEmpty()) {
                     Log.d(TAG, "Registration failed: Email already exists")
                     return@withContext null
                 }
 
                 // Insert new user
-                val insertQuery = """
-                INSERT INTO Users (email, password_hash, user_type, is_profile_complete)
-                VALUES (?, ?, ?, 0)
-            """.trimIndent()
-
-                val preparedStatement = connection?.prepareStatement(
-                    insertQuery,
-                    java.sql.Statement.RETURN_GENERATED_KEYS
-                )
-                preparedStatement?.setString(1, email)
-                preparedStatement?.setString(2, password) // In production, hash this!
-                preparedStatement?.setString(3, userType)
-
-                val rowsAffected = preparedStatement?.executeUpdate() ?: 0
-
-                var user: User? = null
-                if (rowsAffected > 0) {
-                    val generatedKeys = preparedStatement?.generatedKeys
-                    if (generatedKeys?.next() == true) {
-                        val userId = generatedKeys.getInt(1)
-                        user = User(
-                            userId = userId,
-                            email = email,
-                            userType = userType,
-                            isProfileComplete = false,
-                            firstName = ""
-                        )
-                        Log.d(TAG, "Registration successful for: $email")
-
-                        // Save user to session
-                        UserSession.setUser(user)
-                    }
-                    generatedKeys?.close()
+                val newUser = buildJsonObject {
+                    put("email", email)
+                    put("password_hash", password) // Should be hashed!
+                    put("user_type", userType)
+                    put("is_profile_complete", false)
                 }
 
-                preparedStatement?.close()
-                connection?.close()
+                val insertedUser = supabase.from("users")
+                    .insert(newUser) {
+                        select(columns = io.github.jan.supabase.postgrest.query.Columns.list("user_id", "email", "user_type", "is_profile_complete"))
+                    }
+                    .decodeSingle<SimpleUserDto>()
 
+                val user = User(
+                    userId = insertedUser.user_id,
+                    email = insertedUser.email,
+                    userType = insertedUser.user_type,
+                    isProfileComplete = insertedUser.is_profile_complete,
+                    firstName = ""
+                )
+
+                Log.d(TAG, "Registration successful for: $email")
+                UserSession.setUser(user)
                 user
+
             } catch (e: Exception) {
                 Log.e(TAG, "Registration error: ${e.message}", e)
                 null
@@ -122,20 +139,15 @@ class UserRepository {
 
     suspend fun checkEmailExists(email: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = "SELECT COUNT(*) as count FROM Users WHERE email = ?"
+            val result = supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("user_id")) {
+                    filter {
+                        eq("email", email)
+                    }
+                }
+                .decodeList<UserIdDto>()
 
-            val preparedStatement = connection?.prepareStatement(query)
-            preparedStatement?.setString(1, email)
-
-            val resultSet = preparedStatement?.executeQuery()
-            val exists = resultSet?.next() == true && resultSet.getInt("count") > 0
-
-            resultSet?.close()
-            preparedStatement?.close()
-            connection?.close()
-
-            exists
+            result.isNotEmpty()
         } catch (e: Exception) {
             Log.e(TAG, "Error checking email: ${e.message}", e)
             false
@@ -145,27 +157,41 @@ class UserRepository {
     suspend fun updateUserProfileStatus(userId: Int, isComplete: Boolean): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                val connection = DatabaseConnection.getConnection()
-                val query =
-                    "UPDATE Users SET is_profile_complete = ?, updated_at = GETDATE() WHERE user_id = ?"
-                val preparedStatement = connection?.prepareStatement(query)
-
-                preparedStatement?.apply {
-                    setBoolean(1, isComplete)
-                    setInt(2, userId)
+                val updates = buildJsonObject {
+                    put("is_profile_complete", isComplete)
                 }
 
-                val rowsAffected = preparedStatement?.executeUpdate() ?: 0
-
-                preparedStatement?.close()
-                connection?.close()
+                supabase.from("users")
+                    .update(updates) {
+                        filter {
+                            eq("user_id", userId)
+                        }
+                    }
 
                 Log.d(TAG, "Updated profile status for user $userId to $isComplete")
-                rowsAffected > 0
+                true
             } catch (e: Exception) {
                 Log.e(TAG, "Error updating profile status: ${e.message}", e)
                 false
             }
         }
-
 }
+
+// DTOs for Supabase
+@Serializable
+data class SimpleUserDto(
+    val user_id: Int,
+    val email: String,
+    val user_type: String,
+    val is_profile_complete: Boolean
+)
+
+@Serializable
+data class UserIdDto(
+    val user_id: Int
+)
+
+@Serializable
+data class FirstNameDto(
+    val first_name: String
+)

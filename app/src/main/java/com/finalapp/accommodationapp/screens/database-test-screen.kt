@@ -8,8 +8,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.finalapp.accommodationapp.data.DatabaseConnection
+import com.finalapp.accommodationapp.data.SupabaseClient
+import com.finalapp.accommodationapp.data.SupabaseConfig
+import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 
 @Composable
 fun DatabaseTestScreen() {
@@ -17,7 +20,7 @@ fun DatabaseTestScreen() {
     var universities by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -25,12 +28,12 @@ fun DatabaseTestScreen() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Database Connection Test",
+            text = "Supabase Connection Test",
             style = MaterialTheme.typography.headlineMedium
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Card(
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -46,28 +49,44 @@ fun DatabaseTestScreen() {
                         else -> MaterialTheme.colorScheme.onSurface
                     }
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text("Supabase URL:", style = MaterialTheme.typography.labelSmall)
+                Text(
+                    text = SupabaseConfig.SUPABASE_URL,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Button(
             onClick = {
                 coroutineScope.launch {
                     isLoading = true
                     connectionStatus = "Testing connection..."
-                    
-                    val isConnected = DatabaseConnection.testConnection()
-                    connectionStatus = if (isConnected) {
-                        "Connected successfully!"
-                    } else {
-                        "Connection failed"
+
+                    try {
+                        // Test connection by fetching universities
+                        val result = SupabaseClient.client
+                            .from("universities")
+                            .select {
+                                filter {
+                                    eq("is_active", true)
+                                }
+                            }
+                            .decodeList<TestUniversityDto>()
+
+                        universities = result.map { it.name }
+                        connectionStatus = "Connected successfully!"
+
+                    } catch (e: Exception) {
+                        connectionStatus = "Connection failed: ${e.message?.take(100)}"
+                        universities = emptyList()
                     }
-                    
-                    if (isConnected) {
-                        universities = DatabaseConnection.getUniversities()
-                    }
-                    
+
                     isLoading = false
                 }
             },
@@ -80,18 +99,18 @@ fun DatabaseTestScreen() {
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {
-                Text("Test Database Connection")
+                Text("Test Supabase Connection")
             }
         }
-        
+
         if (universities.isNotEmpty()) {
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             Text(
-                "Universities in Database:",
+                "Universities in Supabase (${universities.size}):",
                 style = MaterialTheme.typography.titleMedium
             )
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -110,3 +129,11 @@ fun DatabaseTestScreen() {
         }
     }
 }
+
+// Simple DTO for testing
+@Serializable
+private data class TestUniversityDto(
+    val university_id: Int,
+    val name: String,
+    val is_active: Boolean? = true
+)

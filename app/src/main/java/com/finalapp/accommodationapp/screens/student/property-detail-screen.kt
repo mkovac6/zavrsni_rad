@@ -1,5 +1,6 @@
 package com.finalapp.accommodationapp.screens.student
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
@@ -48,6 +49,7 @@ fun PropertyDetailScreen(
     var showBookingDialog by remember { mutableStateOf(false) }
     var bookingMessage by remember { mutableStateOf("") }
     var isProcessingBooking by remember { mutableStateOf(false) }
+    var hasStudentProfile by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -80,7 +82,12 @@ fun PropertyDetailScreen(
                         val student = studentRepository.getStudentProfile(currentUser.userId)
                         if (student != null) {
                             studentId = student.studentId
+                            hasStudentProfile = true
                             isFavorite = favoritesRepository.isFavorite(student.studentId, propertyId)
+                        } else {
+                            // Student profile doesn't exist
+                            hasStudentProfile = false
+                            Log.e("PropertyDetail", "No student profile found for userId: ${currentUser.userId}")
                         }
                     }
                 } else {
@@ -116,8 +123,8 @@ fun PropertyDetailScreen(
                         }
                     }
 
-                    // Show favorite button for students
-                    if (UserSession.currentUser?.userType == "student" && studentId > 0) {
+                    // Show favorite button for students with profiles
+                    if (UserSession.currentUser?.userType == "student" && hasStudentProfile && studentId > 0) {
                         IconButton(
                             onClick = {
                                 scope.launch {
@@ -174,7 +181,15 @@ fun PropertyDetailScreen(
                                 }
                             }
                             Button(
-                                onClick = { showBookingDialog = true },
+                                onClick = {
+                                    if (hasStudentProfile) {
+                                        showBookingDialog = true
+                                    } else {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Please complete your profile to make bookings")
+                                        }
+                                    }
+                                },
                                 modifier = Modifier.height(48.dp)
                             ) {
                                 Text("Book Now")
@@ -234,6 +249,37 @@ fun PropertyDetailScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Show profile warning for students without profiles
+                    if (UserSession.currentUser?.userType == "student" && !hasStudentProfile) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Warning,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Complete your profile to book properties and save favorites",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Property Title and Type
                     item {
                         Column {
@@ -421,7 +467,7 @@ fun PropertyDetailScreen(
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = property!!.landlordName,
+                                            text = property!!.landlordName.ifEmpty { "Landlord" },
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -431,17 +477,19 @@ fun PropertyDetailScreen(
                                                 style = MaterialTheme.typography.bodyMedium
                                             )
                                         }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Filled.Phone,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = property!!.landlordPhone,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
+                                        if (property!!.landlordPhone.isNotEmpty()) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Filled.Phone,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = property!!.landlordPhone,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            }
                                         }
                                         if (property!!.landlordRating > 0) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -531,14 +579,21 @@ fun PropertyDetailScreen(
                     isProcessingBooking = true
                     showBookingDialog = false
 
+                    // Make sure we have a valid student ID
+                    if (studentId <= 0) {
+                        snackbarHostState.showSnackbar("Please complete your student profile to make bookings")
+                        isProcessingBooking = false
+                        return@launch
+                    }
+
                     // Check availability first
                     val isAvailable = bookingRepository.checkDateAvailability(propertyId, startDate, endDate)
 
                     if (isAvailable) {
-                        // Create booking
+                        // Create booking with the correct studentId
                         val success = bookingRepository.createBooking(
                             propertyId = propertyId,
-                            studentId = studentId,
+                            studentId = studentId,  // This will now be valid
                             startDate = startDate,
                             endDate = endDate,
                             totalPrice = totalPrice,
@@ -591,8 +646,6 @@ fun FlowRow(
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     content: @Composable () -> Unit
 ) {
-    // Simple implementation of FlowRow
-    // In production, you'd use the actual FlowRow from accompanist or similar
     Row(
         modifier = modifier,
         horizontalArrangement = horizontalArrangement

@@ -1,18 +1,25 @@
 package com.finalapp.accommodationapp.data.repository.student
 
 import android.util.Log
-import android.util.Log.e
-import com.finalapp.accommodationapp.data.DatabaseConnection
+import com.finalapp.accommodationapp.data.SupabaseClient
 import com.finalapp.accommodationapp.data.model.Booking
+import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.sql.Date
-import java.sql.Statement
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.text.SimpleDateFormat
+import java.util.*
 
 class BookingRepository {
     companion object {
         private const val TAG = "BookingRepository"
     }
+
+    private val supabase = SupabaseClient.client
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     suspend fun createBooking(
         propertyId: Int,
@@ -23,32 +30,21 @@ class BookingRepository {
         messageToLandlord: String?
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            
-            val query = """
-                INSERT INTO Bookings (
-                    property_id, student_id, start_date, end_date, 
-                    status, total_price, message_to_landlord
-                ) VALUES (?, ?, ?, ?, 'pending', ?, ?)
-            """.trimIndent()
-            
-            val preparedStatement = connection?.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)
-            preparedStatement?.apply {
-                setInt(1, propertyId)
-                setInt(2, studentId)
-                setDate(3, Date.valueOf(startDate))
-                setDate(4, Date.valueOf(endDate))
-                setDouble(5, totalPrice)
-                setString(6, messageToLandlord)
+            val newBooking = buildJsonObject {
+                put("property_id", propertyId)
+                put("student_id", studentId)
+                put("start_date", startDate)
+                put("end_date", endDate)
+                put("status", "pending")
+                put("total_price", totalPrice)
+                put("message_to_landlord", messageToLandlord)
             }
-            
-            val rowsAffected = preparedStatement?.executeUpdate() ?: 0
-            
-            preparedStatement?.close()
-            connection?.close()
-            
-            Log.d(TAG, "Booking created: $rowsAffected rows affected")
-            rowsAffected > 0
+
+            supabase.from("bookings")
+                .insert(newBooking)
+
+            Log.d(TAG, "Booking created successfully")
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Error creating booking", e)
             false
@@ -56,203 +52,323 @@ class BookingRepository {
     }
 
     suspend fun getStudentBookings(studentId: Int): List<Booking> = withContext(Dispatchers.IO) {
-        val bookings = mutableListOf<Booking>()
-        
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-                SELECT 
-                    b.*,
-                    p.title as property_title,
-                    p.address as property_address,
-                    l.first_name + ' ' + l.last_name as landlord_name
-                FROM Bookings b
-                JOIN Properties p ON b.property_id = p.property_id
-                JOIN Landlords l ON p.landlord_id = l.landlord_id
-                WHERE b.student_id = ?
-                ORDER BY b.created_at DESC
-            """.trimIndent()
-            
-            val preparedStatement = connection?.prepareStatement(query)
-            preparedStatement?.setInt(1, studentId)
-            val resultSet = preparedStatement?.executeQuery()
-            
-            while (resultSet?.next() == true) {
-                bookings.add(
-                    Booking(
-                        bookingId = resultSet.getInt("booking_id"),
-                        propertyId = resultSet.getInt("property_id"),
-                        studentId = resultSet.getInt("student_id"),
-                        startDate = resultSet.getDate("start_date"),
-                        endDate = resultSet.getDate("end_date"),
-                        status = resultSet.getString("status"),
-                        totalPrice = resultSet.getDouble("total_price"),
-                        messageToLandlord = resultSet.getString("message_to_landlord"),
-                        createdAt = resultSet.getDate("created_at"),
-                        updatedAt = resultSet.getDate("updated_at"),
-                        propertyTitle = resultSet.getString("property_title"),
-                        propertyAddress = resultSet.getString("property_address"),
-                        landlordName = resultSet.getString("landlord_name")
-                    )
-                )
+            Log.d(TAG, "Fetching bookings for student: $studentId")
+
+            // First get bookings for this student
+            val bookings = supabase.from("bookings")
+                .select() {
+                    filter {
+                        eq("student_id", studentId)
+                    }
+                }
+                .decodeList<SimpleBookingDto>()
+
+            Log.d(TAG, "Found ${bookings.size} bookings for student")
+
+            // Get unique property IDs
+            val propertyIds = bookings.map { it.property_id }.distinct()
+
+            if (propertyIds.isEmpty()) {
+                return@withContext emptyList()
             }
-            
-            resultSet?.close()
-            preparedStatement?.close()
-            connection?.close()
-            
-            Log.d(TAG, "Loaded ${bookings.size} bookings for student $studentId")
+
+            // Fetch property details
+            val properties = supabase.from("properties")
+                .select() {
+                    filter {
+                        isIn("property_id", propertyIds)
+                    }
+                }
+                .decodeList<SimplePropertyDto>()
+
+            // Create a map for quick lookup
+            val propertyMap = properties.associateBy { it.property_id }
+
+            // Map bookings with property details
+            bookings.map { dto ->
+                val property = propertyMap[dto.property_id]
+                Booking(
+                    bookingId = dto.booking_id,
+                    propertyId = dto.property_id,
+                    studentId = dto.student_id,
+                    startDate = dto.start_date?.let {
+                        try { dateFormat.parse(it) } catch (e: Exception) { null }
+                    },
+                    endDate = dto.end_date?.let {
+                        try { dateFormat.parse(it) } catch (e: Exception) { null }
+                    },
+                    status = dto.status,
+                    totalPrice = dto.total_price ?: 0.0,
+                    messageToLandlord = dto.message_to_landlord,
+                    createdAt = dto.created_at?.let {
+                        try { dateFormat.parse(it) } catch (e: Exception) { null }
+                    },
+                    updatedAt = dto.updated_at?.let {
+                        try { dateFormat.parse(it) } catch (e: Exception) { null }
+                    },
+                    propertyTitle = property?.title,
+                    propertyAddress = property?.address,
+                    landlordName = "" // We'll skip fetching landlord names for now to keep it simple
+                )
+            }.also {
+                Log.d(TAG, "Successfully loaded ${it.size} bookings for student $studentId")
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading student bookings", e)
+            Log.e(TAG, "Error loading student bookings: ${e.message}", e)
+            emptyList()
         }
-        
-        bookings
     }
 
     suspend fun getLandlordBookings(landlordId: Int): List<Booking> = withContext(Dispatchers.IO) {
-        val bookings = mutableListOf<Booking>()
-        
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-                SELECT 
-                    b.*,
-                    p.title as property_title,
-                    p.address as property_address,
-                    s.first_name + ' ' + s.last_name as student_name
-                FROM Bookings b
-                JOIN Properties p ON b.property_id = p.property_id
-                JOIN Students s ON b.student_id = s.student_id
-                WHERE p.landlord_id = ?
-                ORDER BY b.created_at DESC
-            """.trimIndent()
-            
-            val preparedStatement = connection?.prepareStatement(query)
-            preparedStatement?.setInt(1, landlordId)
-            val resultSet = preparedStatement?.executeQuery()
-            
-            while (resultSet?.next() == true) {
-                bookings.add(
-                    Booking(
-                        bookingId = resultSet.getInt("booking_id"),
-                        propertyId = resultSet.getInt("property_id"),
-                        studentId = resultSet.getInt("student_id"),
-                        startDate = resultSet.getDate("start_date"),
-                        endDate = resultSet.getDate("end_date"),
-                        status = resultSet.getString("status"),
-                        totalPrice = resultSet.getDouble("total_price"),
-                        messageToLandlord = resultSet.getString("message_to_landlord"),
-                        createdAt = resultSet.getDate("created_at"),
-                        updatedAt = resultSet.getDate("updated_at"),
-                        propertyTitle = resultSet.getString("property_title"),
-                        propertyAddress = resultSet.getString("property_address"),
-                        studentName = resultSet.getString("student_name")
-                    )
+            Log.d("BookingRepository", "Fetching bookings for landlord: $landlordId")
+
+            // get properties for this landlord
+            val properties = supabase
+                .from("properties")
+                .select(columns = Columns.list("property_id", "title", "address")) {
+                    filter {
+                        eq("landlord_id", landlordId)
+                    }
+                }
+                .decodeList<SimplePropertyDto>()
+
+            val propertyIds = properties.map { it.property_id }
+
+            if (propertyIds.isEmpty()) {
+                Log.d("BookingRepository", "No properties found for landlord $landlordId")
+                return@withContext emptyList()
+            }
+
+            // Then get bookings for those properties
+            val bookings = supabase
+                .from("bookings")
+                .select() {
+                    filter {
+                        isIn("property_id", propertyIds)
+                    }
+                }
+                .decodeList<SimpleBookingDto>()
+
+            Log.d("BookingRepository", "Found ${bookings.size} bookings")
+
+            // Map properties for quick lookup
+            val propertyMap = properties.associateBy { it.property_id }
+
+            bookings.map { dto ->
+                val property = propertyMap[dto.property_id]
+                Booking(
+                    bookingId = dto.booking_id,
+                    propertyId = dto.property_id,
+                    studentId = dto.student_id,
+                    startDate = dto.start_date?.let {
+                        try { dateFormat.parse(it) } catch (e: Exception) { null }
+                    },
+                    endDate = dto.end_date?.let {
+                        try { dateFormat.parse(it) } catch (e: Exception) { null }
+                    },
+                    status = dto.status,
+                    totalPrice = dto.total_price ?: 0.0,
+                    messageToLandlord = dto.message_to_landlord,
+                    propertyTitle = property?.title ?: "Unknown Property",
+                    propertyAddress = property?.address ?: "",
+                    studentName = "Student #${dto.student_id}"
                 )
             }
-            
-            resultSet?.close()
-            preparedStatement?.close()
-            connection?.close()
-            
-            Log.d(TAG, "Loaded ${bookings.size} bookings for landlord $landlordId")
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading landlord bookings", e)
+            Log.e("BookingRepository", "Error loading landlord bookings: ${e.message}", e)
+            emptyList()
         }
-        
-        bookings
     }
 
     suspend fun updateBookingStatus(bookingId: Int, status: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-                UPDATE Bookings 
-                SET status = ?, updated_at = GETDATE() 
-                WHERE booking_id = ?
-            """.trimIndent()
-            
-            val preparedStatement = connection?.prepareStatement(query)
-            preparedStatement?.apply {
-                setString(1, status)
-                setInt(2, bookingId)
+            val updates = buildJsonObject {
+                put("status", status)
             }
-            
-            val rowsAffected = preparedStatement?.executeUpdate() ?: 0
-            
-            preparedStatement?.close()
-            connection?.close()
-            
+
+            supabase.from("bookings")
+                .update(updates) {
+                    filter {
+                        eq("booking_id", bookingId)
+                    }
+                }
+
             Log.d(TAG, "Updated booking $bookingId status to $status")
-            rowsAffected > 0
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Error updating booking status", e)
             false
         }
     }
 
-    suspend fun countPendingBookingsForLandlord(landlordId: Int): Int = withContext(Dispatchers.IO){
+    suspend fun countPendingBookingsForLandlord(landlordId: Int): Int = withContext(Dispatchers.IO) {
         try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-            SELECT COUNT(*) as count
-            FROM Bookings b
-            JOIN Properties p ON b.property_id = p.property_id
-            WHERE p.landlord_id = ? AND b.status = 'pending'
-        """.trimIndent()
+            //get property IDs for this landlord
+            val properties = supabase
+                .from("properties")
+                .select(columns = Columns.list("property_id")) {
+                    filter {
+                        eq("landlord_id", landlordId)
+                    }
+                }
+                .decodeList<PropertyIdOnlyDto>()
 
-            val preparedStatement = connection?.prepareStatement(query)
-            preparedStatement?.setInt(1, landlordId)
-            val resultSet = preparedStatement?.executeQuery()
+            val propertyIds = properties.map { it.property_id }
 
-            val count = if (resultSet?.next() == true) {
-                resultSet.getInt("count")
-            } else 0
+            if (propertyIds.isEmpty()) {
+                return@withContext 0
+            }
 
-            resultSet?.close()
-            preparedStatement?.close()
-            connection?.close()
+            // Then count pending bookings for those properties
+            val bookings = supabase
+                .from("bookings")
+                .select(columns = Columns.list("booking_id")) {
+                    filter {
+                        isIn("property_id", propertyIds)
+                        eq("status", "pending")
+                    }
+                }
+                .decodeList<BookingIdOnlyDto>()
 
-            Log.d(TAG, "Landlord $landlordId has $count pending bookings")
-            count
+            bookings.size
         } catch (e: Exception) {
-            e(TAG, "Error counting pending bookings", e)
+            Log.e("BookingRepository", "Error counting pending bookings: ${e.message}", e)
             0
         }
     }
 
-    suspend fun checkDateAvailability(propertyId: Int, startDate: String, endDate: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val connection = DatabaseConnection.getConnection()
-            val query = """
-                SELECT COUNT(*) as count
-                FROM Bookings
-                WHERE property_id = ?
-                AND status IN ('approved', 'pending')
-                AND NOT (end_date < ? OR start_date > ?)
-            """.trimIndent()
-            
-            val preparedStatement = connection?.prepareStatement(query)
-            preparedStatement?.apply {
-                setInt(1, propertyId)
-                setDate(2, Date.valueOf(startDate))
-                setDate(3, Date.valueOf(endDate))
+    suspend fun checkDateAvailability(propertyId: Int, startDate: String, endDate: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                // Get all bookings for this property that might overlap
+                val result = supabase.from("bookings")
+                    .select {
+                        filter {
+                            eq("property_id", propertyId)
+                            or {
+                                eq("status", "approved")
+                                eq("status", "pending")
+                            }
+                        }
+                    }
+                    .decodeList<BookingDateDto>()
+
+                // Check for overlaps manually
+                val requestStart = dateFormat.parse(startDate)!!
+                val requestEnd = dateFormat.parse(endDate)!!
+
+                val hasOverlap = result.any { booking ->
+                    val bookingStart = booking.start_date?.let { dateFormat.parse(it) } ?: return@any false
+                    val bookingEnd = booking.end_date?.let { dateFormat.parse(it) } ?: return@any false
+
+                    // Check if dates overlap
+                    !(bookingEnd.before(requestStart) || bookingStart.after(requestEnd))
+                }
+
+                Log.d(TAG, "Property $propertyId availability check: ${!hasOverlap}")
+                !hasOverlap // Available if no overlapping bookings
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking date availability", e)
+                false
             }
-            
-            val resultSet = preparedStatement?.executeQuery()
-            val count = if (resultSet?.next() == true) {
-                resultSet.getInt("count")
-            } else 0
-            
-            resultSet?.close()
-            preparedStatement?.close()
-            connection?.close()
-            
-            Log.d(TAG, "Property $propertyId has $count overlapping bookings")
-            count == 0 // Available if no overlapping bookings
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking date availability", e)
-            false
         }
-    }
 }
+
+// DTOs for Supabase
+@Serializable
+data class BookingDto(
+    val booking_id: Int,
+    val property_id: Int,
+    val student_id: Int,
+    val start_date: String? = null,
+    val end_date: String? = null,
+    val status: String? = "pending",
+    val total_price: Double? = 0.0,
+    val message_to_landlord: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null,
+    val properties: PropertyInfoDto? = null
+)
+
+@Serializable
+data class BookingWithStudentDto(
+    val booking_id: Int,
+    val property_id: Int,
+    val student_id: Int,
+    val start_date: String? = null,
+    val end_date: String? = null,
+    val status: String? = "pending",
+    val total_price: Double? = 0.0,
+    val message_to_landlord: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null,
+    val properties: PropertyInfoDto? = null,
+    val students: StudentInfoDto? = null
+)
+
+@Serializable
+data class PropertyInfoDto(
+    val property_id: Int? = null,
+    val title: String? = null,
+    val address: String? = null,
+    val landlord_id: Int? = null,
+    val landlords: LandlordNameDto? = null
+)
+
+@Serializable
+data class LandlordNameDto(
+    val first_name: String,
+    val last_name: String
+)
+
+@Serializable
+data class StudentInfoDto(
+    val first_name: String,
+    val last_name: String
+)
+
+@Serializable
+data class BookingCountDto(
+    val booking_id: Int
+)
+
+@Serializable
+data class BookingDateDto(
+    val booking_id: Int,
+    val start_date: String? = null,
+    val end_date: String? = null,
+    val status: String? = null
+)
+
+@Serializable
+data class SimplePropertyDto(
+    val property_id: Int,
+    val title: String? = null,
+    val address: String? = null
+)
+
+@Serializable
+data class PropertyIdOnlyDto(
+    val property_id: Int
+)
+
+@Serializable
+data class BookingIdOnlyDto(
+    val booking_id: Int
+)
+
+@Serializable
+data class SimpleBookingDto(
+    val booking_id: Int,
+    val property_id: Int,
+    val student_id: Int,
+    val start_date: String? = null,
+    val end_date: String? = null,
+    val status: String,
+    val total_price: Double? = null,
+    val message_to_landlord: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null
+)

@@ -67,18 +67,41 @@ fun LandlordAddPropertyScreen(
         scope.launch {
             isLoading = true
 
-            // Get current landlord
-            val userId = UserSession.currentUser?.userId
+            // Debug: Check UserSession
+            val currentUser = UserSession.currentUser
+            Log.d("LandlordAddProperty", "Current user from session: ${currentUser?.email}")
+            Log.d("LandlordAddProperty", "Current userId: ${currentUser?.userId}")
+            Log.d("LandlordAddProperty", "User type: ${currentUser?.userType}")
+
+            val userId = currentUser?.userId
             if (userId != null) {
+                Log.d("LandlordAddProperty", "Attempting to fetch landlord for userId: $userId")
+
                 val landlord = landlordRepository.getLandlordByUserId(userId)
+
                 if (landlord != null) {
                     landlordId = landlord.landlordId
                     landlordName = "${landlord.firstName} ${landlord.lastName}"
+                    Log.d("LandlordAddProperty", "Successfully loaded landlord: $landlordName (ID: $landlordId)")
+                } else {
+                    Log.e("LandlordAddProperty", "getLandlordByUserId returned null for userId: $userId")
+
+                    // Let's check what the actual issue is
+                    // This shouldn't happen since we know the profile exists
+                    Log.e("LandlordAddProperty", "This user should have a landlord profile in the database!")
                 }
+            } else {
+                Log.e("LandlordAddProperty", "UserSession.currentUser?.userId is null!")
+                Log.e("LandlordAddProperty", "Full UserSession.currentUser: ${UserSession.currentUser}")
             }
 
             // Load amenities
-            amenities = adminRepository.getAllAmenities()
+            try {
+                amenities = adminRepository.getAllAmenities()
+                Log.d("LandlordAddProperty", "Loaded ${amenities.size} amenities")
+            } catch (e: Exception) {
+                Log.e("LandlordAddProperty", "Failed to load amenities: ${e.message}")
+            }
 
             isLoading = false
         }
