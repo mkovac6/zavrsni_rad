@@ -1,5 +1,6 @@
 package com.finalapp.accommodationapp.data.repository.student
 
+import android.annotation.SuppressLint
 import android.util.Log
 import com.finalapp.accommodationapp.data.SupabaseClient
 import com.finalapp.accommodationapp.data.model.student.StudentProfile
@@ -84,20 +85,57 @@ class StudentRepository {
 
     suspend fun getStudentProfile(userId: Int): StudentProfile? = withContext(Dispatchers.IO) {
         try {
-            // Fixed: use from() syntax with filter
+            Log.d(TAG, "Fetching student profile for userId: $userId")
+
+            // First get the student record without joins
             val result = supabase.from("students")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("""
-                    *,
-                    universities!inner(name)
-                """.trimIndent())) {
+                .select() {
                     filter {
                         eq("user_id", userId)
                     }
                 }
-                .decodeSingleOrNull<StudentProfileDto>()
+                .decodeSingleOrNull<StudentDto>()
 
-            result?.toStudentProfile()
+            if (result != null) {
+                // Get university name separately if needed
+                val universityName = if (result.university_id > 0) {
+                    try {
+                        val uni = supabase.from("universities")
+                            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("name")) {
+                                filter {
+                                    eq("university_id", result.university_id)
+                                }
+                            }
+                            .decodeSingleOrNull<UniversityNameDto>()
+                        uni?.name ?: "Unknown University"
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error fetching university name: ${e.message}")
+                        "Unknown University"
+                    }
+                } else {
+                    "Unknown University"
+                }
 
+                Log.d(TAG, "Found student profile: studentId=${result.student_id}, userId=${result.user_id}")
+
+                StudentProfile(
+                    studentId = result.student_id,
+                    userId = result.user_id,
+                    universityId = result.university_id,
+                    universityName = universityName,
+                    firstName = result.first_name,
+                    lastName = result.last_name,
+                    phone = result.phone,
+                    studentNumber = result.student_number,
+                    yearOfStudy = result.year_of_study ?: 0,
+                    program = result.program,
+                    budgetMin = result.budget_min ?: 0.0,
+                    budgetMax = result.budget_max ?: 0.0
+                )
+            } else {
+                Log.e(TAG, "No student profile found for userId: $userId")
+                null
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching student profile: ${e.message}", e)
             null
@@ -143,7 +181,6 @@ class StudentRepository {
         }
     }
 }
-
 // DTOs for Supabase
 @Serializable
 data class StudentDto(
@@ -156,8 +193,18 @@ data class StudentDto(
     val student_number: String? = null,
     val year_of_study: Int? = null,
     val program: String? = null,
+    val profile_picture: String? = null,  // Add this field
+    val bio: String? = null,  // Add this field
+    val preferred_move_in_date: String? = null,  // Add this field if it exists
     val budget_min: Double? = null,
-    val budget_max: Double? = null
+    val budget_max: Double? = null,
+    val created_at: String? = null,  // Add these timestamp fields
+    val updated_at: String? = null
+)
+
+@Serializable
+data class UniversityNameDto(
+    val name: String
 )
 
 @Serializable

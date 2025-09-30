@@ -31,7 +31,7 @@ fun PropertyDetailScreen(
     propertyId: Int,
     onNavigateBack: () -> Unit,
     onBookingClick: () -> Unit,
-    onEditClick: ((Int) -> Unit)? = null  // Add optional edit navigation
+    onEditClick: ((Int) -> Unit)? = null
 ) {
     val propertyRepository = remember { PropertyRepository() }
     val landlordRepository = remember { LandlordRepository() }
@@ -49,7 +49,6 @@ fun PropertyDetailScreen(
     var showBookingDialog by remember { mutableStateOf(false) }
     var bookingMessage by remember { mutableStateOf("") }
     var isProcessingBooking by remember { mutableStateOf(false) }
-    var hasStudentProfile by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -78,16 +77,19 @@ fun PropertyDetailScreen(
                             isLandlordOwner = landlord.landlordId == propertyLandlordId
                         }
                     } else if (currentUser?.userType == "student") {
-                        // Check if property is favorite
+                        Log.d("PropertyDetail", "Current user is student with userId: ${currentUser.userId}")
+
+                        // Get student profile
                         val student = studentRepository.getStudentProfile(currentUser.userId)
+
                         if (student != null) {
                             studentId = student.studentId
-                            hasStudentProfile = true
+                            Log.d("PropertyDetail", "Found student profile with studentId: $studentId")
                             isFavorite = favoritesRepository.isFavorite(student.studentId, propertyId)
                         } else {
-                            // Student profile doesn't exist
-                            hasStudentProfile = false
                             Log.e("PropertyDetail", "No student profile found for userId: ${currentUser.userId}")
+                            // Let's check what's in the database
+                            errorMessage = "Unable to load student profile. Please try logging in again."
                         }
                     }
                 } else {
@@ -123,8 +125,8 @@ fun PropertyDetailScreen(
                         }
                     }
 
-                    // Show favorite button for students with profiles
-                    if (UserSession.currentUser?.userType == "student" && hasStudentProfile && studentId > 0) {
+                    // Show favorite button for students
+                    if (UserSession.currentUser?.userType == "student" && studentId > 0) {
                         IconButton(
                             onClick = {
                                 scope.launch {
@@ -181,15 +183,7 @@ fun PropertyDetailScreen(
                                 }
                             }
                             Button(
-                                onClick = {
-                                    if (hasStudentProfile) {
-                                        showBookingDialog = true
-                                    } else {
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("Please complete your profile to make bookings")
-                                        }
-                                    }
-                                },
+                                onClick = { showBookingDialog = true },
                                 modifier = Modifier.height(48.dp)
                             ) {
                                 Text("Book Now")
@@ -249,37 +243,6 @@ fun PropertyDetailScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Show profile warning for students without profiles
-                    if (UserSession.currentUser?.userType == "student" && !hasStudentProfile) {
-                        item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Warning,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Complete your profile to book properties and save favorites",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            }
-                        }
-                    }
-
                     // Property Title and Type
                     item {
                         Column {
@@ -579,21 +542,14 @@ fun PropertyDetailScreen(
                     isProcessingBooking = true
                     showBookingDialog = false
 
-                    // Make sure we have a valid student ID
-                    if (studentId <= 0) {
-                        snackbarHostState.showSnackbar("Please complete your student profile to make bookings")
-                        isProcessingBooking = false
-                        return@launch
-                    }
-
                     // Check availability first
                     val isAvailable = bookingRepository.checkDateAvailability(propertyId, startDate, endDate)
 
                     if (isAvailable) {
-                        // Create booking with the correct studentId
+                        // Create booking with the studentId
                         val success = bookingRepository.createBooking(
                             propertyId = propertyId,
-                            studentId = studentId,  // This will now be valid
+                            studentId = studentId,
                             startDate = startDate,
                             endDate = endDate,
                             totalPrice = totalPrice,
