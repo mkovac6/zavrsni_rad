@@ -20,14 +20,12 @@ class PropertyRepository {
     private val supabase = SupabaseClient.client
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
-// Replace the getAllProperties method (lines 22-64) with this:
-
     suspend fun getAllProperties(): List<Property> = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Fetching all active properties")
 
-            // Use SimplePropertyDto without joins
-            val result = supabase.from("properties")
+            // First fetch all properties
+            val properties = supabase.from("properties")
                 .select() {
                     filter {
                         eq("is_active", true)
@@ -35,7 +33,27 @@ class PropertyRepository {
                 }
                 .decodeList<SimplePropertyDto>()
 
-            val properties = result.map { dto ->
+            // Get unique landlord IDs
+            val landlordIds = properties.map { it.landlord_id }.distinct()
+
+            // Fetch landlord information
+            val landlordMap = if (landlordIds.isNotEmpty()) {
+                val landlords = supabase.from("landlords")
+                    .select() {
+                        filter {
+                            isIn("landlord_id", landlordIds)
+                        }
+                    }
+                    .decodeList<SimpleLandlordDto>()
+
+                landlords.associateBy { it.landlord_id }
+            } else {
+                emptyMap()
+            }
+
+            // Map properties with landlord info
+            val result = properties.map { dto ->
+                val landlord = landlordMap[dto.landlord_id]
                 Property(
                     propertyId = dto.property_id,
                     title = dto.title,
@@ -57,15 +75,19 @@ class PropertyRepository {
                         try { dateFormat.parse(it) } catch (e: Exception) { null }
                     },
                     isActive = dto.is_active ?: true,
-                    landlordName = "",
-                    landlordPhone = "",
-                    landlordRating = 0.0,
-                    companyName = null
+                    landlordName = if (landlord != null) {
+                        "${landlord.first_name} ${landlord.last_name}"
+                    } else {
+                        "Landlord"
+                    },
+                    landlordPhone = landlord?.phone ?: "",
+                    landlordRating = landlord?.rating ?: 0.0,
+                    companyName = landlord?.company_name
                 )
             }
 
-            Log.d(TAG, "Loaded ${properties.size} properties")
-            properties
+            Log.d(TAG, "Loaded ${result.size} properties with landlord info")
+            result
         } catch (e: Exception) {
             Log.e(TAG, "Error loading properties", e)
             emptyList()
@@ -76,8 +98,8 @@ class PropertyRepository {
         try {
             Log.d(TAG, "Fetching property with ID: $propertyId")
 
-            // Simple query without joins to avoid parsing errors
-            val result = supabase.from("properties")
+            // Fetch property
+            val property = supabase.from("properties")
                 .select() {
                     filter {
                         eq("property_id", propertyId)
@@ -85,42 +107,56 @@ class PropertyRepository {
                 }
                 .decodeSingleOrNull<SimplePropertyDto>()
 
-            Log.d(TAG, "Property query result: $result")
+            if (property == null) {
+                Log.e(TAG, "Property not found for ID: $propertyId")
+                return@withContext null
+            }
 
-            result?.let { dto ->
-                Property(
-                    propertyId = dto.property_id,
-                    title = dto.title,
-                    description = dto.description ?: "",
-                    propertyType = dto.property_type,
-                    address = dto.address,
-                    city = dto.city,
-                    postalCode = dto.postal_code ?: "",
-                    latitude = dto.latitude ?: 0.0,
-                    longitude = dto.longitude ?: 0.0,
-                    pricePerMonth = dto.price_per_month,
-                    bedrooms = dto.bedrooms,
-                    bathrooms = dto.bathrooms,
-                    totalCapacity = dto.total_capacity,
-                    availableFrom = dto.available_from?.let {
-                        try { dateFormat.parse(it) } catch (e: Exception) { null }
-                    },
-                    availableTo = dto.available_to?.let {
-                        try { dateFormat.parse(it) } catch (e: Exception) { null }
-                    },
-                    isActive = dto.is_active ?: true,
-                    // Set defaults for landlord info
-                    landlordName = "",
-                    landlordPhone = "",
-                    landlordRating = 0.0,
-                    companyName = null
-                )
-            }.also {
-                if (it != null) {
-                    Log.d(TAG, "Successfully loaded property: ${it.title}")
+            // Fetch landlord info
+            val landlord = try {
+                supabase.from("landlords")
+                    .select() {
+                        filter {
+                            eq("landlord_id", property.landlord_id)
+                        }
+                    }
+                    .decodeSingleOrNull<SimpleLandlordDto>()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching landlord info: ${e.message}")
+                null
+            }
+
+            Property(
+                propertyId = property.property_id,
+                title = property.title,
+                description = property.description ?: "",
+                propertyType = property.property_type,
+                address = property.address,
+                city = property.city,
+                postalCode = property.postal_code ?: "",
+                latitude = property.latitude ?: 0.0,
+                longitude = property.longitude ?: 0.0,
+                pricePerMonth = property.price_per_month,
+                bedrooms = property.bedrooms,
+                bathrooms = property.bathrooms,
+                totalCapacity = property.total_capacity,
+                availableFrom = property.available_from?.let {
+                    try { dateFormat.parse(it) } catch (e: Exception) { null }
+                },
+                availableTo = property.available_to?.let {
+                    try { dateFormat.parse(it) } catch (e: Exception) { null }
+                },
+                isActive = property.is_active ?: true,
+                landlordName = if (landlord != null) {
+                    "${landlord.first_name} ${landlord.last_name}"
                 } else {
-                    Log.e(TAG, "Property not found for ID: $propertyId")
-                }
+                    "Landlord"
+                },
+                landlordPhone = landlord?.phone ?: "",
+                landlordRating = landlord?.rating ?: 0.0,
+                companyName = landlord?.company_name
+            ).also {
+                Log.d(TAG, "Successfully loaded property: ${it.title} with landlord: ${it.landlordName}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading property $propertyId: ${e.message}", e)
@@ -176,7 +212,6 @@ class PropertyRepository {
 
     suspend fun deleteProperty(propertyId: Int): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Supabase should handle cascading deletes if configured properly
             supabase.from("properties")
                 .delete {
                     filter {
@@ -311,8 +346,8 @@ class PropertyRepository {
         try {
             Log.d(TAG, "Fetching properties for landlordId: $landlordId")
 
-            // Simple query without joins to avoid parsing errors
-            val result = supabase.from("properties")
+            // Fetch properties
+            val properties = supabase.from("properties")
                 .select() {
                     filter {
                         eq("landlord_id", landlordId)
@@ -320,9 +355,23 @@ class PropertyRepository {
                 }
                 .decodeList<SimplePropertyDto>()
 
-            Log.d(TAG, "Found ${result.size} properties for landlord $landlordId")
+            // Get landlord info
+            val landlord = try {
+                supabase.from("landlords")
+                    .select() {
+                        filter {
+                            eq("landlord_id", landlordId)
+                        }
+                    }
+                    .decodeSingleOrNull<SimpleLandlordDto>()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching landlord info: ${e.message}")
+                null
+            }
 
-            result.map { dto ->
+            Log.d(TAG, "Found ${properties.size} properties for landlord $landlordId")
+
+            properties.map { dto ->
                 Property(
                     propertyId = dto.property_id,
                     title = dto.title,
@@ -344,12 +393,14 @@ class PropertyRepository {
                         try { dateFormat.parse(it) } catch (e: Exception) { null }
                     },
                     isActive = dto.is_active ?: true,
-                    // Since this is the landlord's own properties, we can use placeholder values
-                    // or fetch the landlord info separately if needed
-                    landlordName = "Your Property",
-                    landlordPhone = "",
-                    landlordRating = 0.0,
-                    companyName = null
+                    landlordName = if (landlord != null) {
+                        "${landlord.first_name} ${landlord.last_name}"
+                    } else {
+                        "Your Property"
+                    },
+                    landlordPhone = landlord?.phone ?: "",
+                    landlordRating = landlord?.rating ?: 0.0,
+                    companyName = landlord?.company_name
                 )
             }.also {
                 Log.d(TAG, "Successfully mapped ${it.size} properties")
@@ -362,28 +413,6 @@ class PropertyRepository {
 }
 
 // DTOs
-@Serializable
-data class PropertyDto(
-    val property_id: Int,
-    val landlord_id: Int,
-    val title: String,
-    val description: String? = null,
-    val property_type: String,
-    val address: String,
-    val city: String,
-    val postal_code: String? = null,
-    val latitude: Double? = null,
-    val longitude: Double? = null,
-    val price_per_month: Double,
-    val bedrooms: Int,
-    val bathrooms: Int,
-    val total_capacity: Int,
-    val available_from: String? = null,
-    val available_to: String? = null,
-    val is_active: Boolean? = true,
-    val landlords: LandlordInfoDto? = null
-)
-
 @Serializable
 data class SimplePropertyDto(
     val property_id: Int,
@@ -408,30 +437,27 @@ data class SimplePropertyDto(
 )
 
 @Serializable
+data class SimpleLandlordDto(
+    val landlord_id: Int,
+    val user_id: Int? = null,
+    val first_name: String,
+    val last_name: String,
+    val phone: String,
+    val is_verified: Boolean? = null,
+    val rating: Double? = null,
+    val company_name: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null
+)
+
+@Serializable
 data class AmenitySimpleDto(
     val amenity_id: Int,
     val name: String
 )
 
 @Serializable
-data class LandlordInfoDto(
-    val first_name: String,
-    val last_name: String,
-    val phone: String,
-    val rating: Double? = null,
-    val company_name: String? = null
-)
-
-@Serializable
 data class PropertyAmenityDto(val amenity_id: Int)
-
-@Serializable
-data class PropertyAmenityWithNameDto(
-    val amenities: AmenityNameDto? = null
-)
-
-@Serializable
-data class AmenityNameDto(val name: String)
 
 @Serializable
 data class LandlordIdDto(val landlord_id: Int)
