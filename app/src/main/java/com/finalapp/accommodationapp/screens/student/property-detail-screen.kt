@@ -24,6 +24,7 @@ import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.screens.components.BookingDialog
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,7 +48,6 @@ fun PropertyDetailScreen(
     var isFavorite by remember { mutableStateOf(false) }
     var studentId by remember { mutableStateOf(0) }
     var showBookingDialog by remember { mutableStateOf(false) }
-    var bookingMessage by remember { mutableStateOf("") }
     var isProcessingBooking by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
@@ -64,38 +64,45 @@ fun PropertyDetailScreen(
                 val loadedProperty = propertyRepository.getPropertyById(propertyId)
                 if (loadedProperty != null) {
                     property = loadedProperty
+
                     // Load amenities
                     amenities = propertyRepository.getPropertyAmenitiesAsStrings(propertyId)
 
                     // Check if current user is the landlord owner
                     val currentUser = UserSession.currentUser
                     if (currentUser?.userType == "landlord") {
-                        val landlord = landlordRepository.getLandlordByUserId(currentUser.userId)
-                        if (landlord != null) {
-                            // Get the property's landlord ID
-                            val propertyLandlordId = propertyRepository.getLandlordIdByPropertyId(propertyId)
-                            isLandlordOwner = landlord.landlordId == propertyLandlordId
+                        try {
+                            val landlord = landlordRepository.getLandlordByUserId(currentUser.userId)
+                            if (landlord != null) {
+                                // Get the property's landlord ID
+                                val propertyLandlordId = propertyRepository.getLandlordIdByPropertyId(propertyId)
+                                isLandlordOwner = landlord.landlordId == propertyLandlordId
+                            }
+                        } catch (e: Exception) {
+                            Log.e("PropertyDetail", "Error checking landlord ownership: ${e.message}")
                         }
                     } else if (currentUser?.userType == "student") {
                         Log.d("PropertyDetail", "Current user is student with userId: ${currentUser.userId}")
 
                         // Get student profile
-                        val student = studentRepository.getStudentProfile(currentUser.userId)
-
-                        if (student != null) {
-                            studentId = student.studentId
-                            Log.d("PropertyDetail", "Found student profile with studentId: $studentId")
-                            isFavorite = favoritesRepository.isFavorite(student.studentId, propertyId)
-                        } else {
-                            Log.e("PropertyDetail", "No student profile found for userId: ${currentUser.userId}")
-                            // Let's check what's in the database
-                            errorMessage = "Unable to load student profile. Please try logging in again."
+                        try {
+                            val student = studentRepository.getStudentProfile(currentUser.userId)
+                            if (student != null) {
+                                studentId = student.studentId
+                                Log.d("PropertyDetail", "Found student profile with studentId: $studentId")
+                                isFavorite = favoritesRepository.isFavorite(student.studentId, propertyId)
+                            } else {
+                                Log.e("PropertyDetail", "No student profile found for userId: ${currentUser.userId}")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("PropertyDetail", "Error loading student profile: ${e.message}")
                         }
                     }
                 } else {
                     errorMessage = "Property not found"
                 }
             } catch (e: Exception) {
+                Log.e("PropertyDetail", "Error loading property: ${e.message}", e)
                 errorMessage = "Error loading property: ${e.message}"
             } finally {
                 isLoading = false
@@ -130,18 +137,22 @@ fun PropertyDetailScreen(
                         IconButton(
                             onClick = {
                                 scope.launch {
-                                    if (isFavorite) {
-                                        val removed = favoritesRepository.removeFromFavorites(studentId, propertyId)
-                                        if (removed) {
-                                            isFavorite = false
-                                            snackbarHostState.showSnackbar("Removed from favorites")
+                                    try {
+                                        if (isFavorite) {
+                                            val removed = favoritesRepository.removeFromFavorites(studentId, propertyId)
+                                            if (removed) {
+                                                isFavorite = false
+                                                snackbarHostState.showSnackbar("Removed from favorites")
+                                            }
+                                        } else {
+                                            val added = favoritesRepository.addToFavorites(studentId, propertyId)
+                                            if (added) {
+                                                isFavorite = true
+                                                snackbarHostState.showSnackbar("Added to favorites")
+                                            }
                                         }
-                                    } else {
-                                        val added = favoritesRepository.addToFavorites(studentId, propertyId)
-                                        if (added) {
-                                            isFavorite = true
-                                            snackbarHostState.showSnackbar("Added to favorites")
-                                        }
+                                    } catch (e: Exception) {
+                                        snackbarHostState.showSnackbar("Error updating favorites")
                                     }
                                 }
                             }
@@ -159,7 +170,7 @@ fun PropertyDetailScreen(
         bottomBar = {
             property?.let { prop ->
                 // Only show booking bar for students
-                if (UserSession.currentUser?.userType == "student") {
+                if (UserSession.currentUser?.userType == "student" && studentId > 0) {
                     BottomAppBar {
                         Row(
                             modifier = Modifier
@@ -176,17 +187,30 @@ fun PropertyDetailScreen(
                                 )
                                 prop.availableFrom?.let { date ->
                                     val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                                    val isAvailable = date.before(Date()) || date == Date()
                                     Text(
-                                        text = "Available from ${dateFormat.format(date)}",
-                                        style = MaterialTheme.typography.bodySmall
+                                        text = if (isAvailable) "Available Now" else "Available from ${dateFormat.format(date)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isAvailable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
                             Button(
                                 onClick = { showBookingDialog = true },
-                                modifier = Modifier.height(48.dp)
+                                modifier = Modifier.height(48.dp),
+                                enabled = !isProcessingBooking
                             ) {
-                                Text("Book Now")
+                                if (isProcessingBooking) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(Icons.Filled.DateRange, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Book Now")
+                                }
                             }
                         }
                     }
@@ -226,7 +250,9 @@ fun PropertyDetailScreen(
                         Text(
                             text = errorMessage ?: "Unknown error",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.error
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = onNavigateBack) {
@@ -261,7 +287,7 @@ fun PropertyDetailScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         AssistChip(
                                             onClick = { },
-                                            label = { Text(property!!.propertyType.capitalize()) },
+                                            label = { Text(property!!.propertyType.replaceFirstChar { it.uppercase() }) },
                                             leadingIcon = {
                                                 Icon(
                                                     Icons.Filled.Home,
@@ -362,10 +388,18 @@ fun PropertyDetailScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = property!!.description,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                )
+                            ) {
+                                Text(
+                                    text = property!!.description,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
                         }
                     }
 
@@ -378,9 +412,6 @@ fun PropertyDetailScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                        }
-
-                        item {
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -398,78 +429,6 @@ fun PropertyDetailScreen(
                                             )
                                         }
                                     )
-                                }
-                            }
-                        }
-                    }
-
-                    // Landlord Information (only show for students)
-                    if (UserSession.currentUser?.userType == "student") {
-                        item {
-                            Text(
-                                text = "Landlord Information",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Card(
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Person,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(48.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = property!!.landlordName.ifEmpty { "Landlord" },
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        property!!.companyName?.let {
-                                            Text(
-                                                text = it,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-                                        if (property!!.landlordPhone.isNotEmpty()) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(
-                                                    Icons.Filled.Phone,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    text = property!!.landlordPhone,
-                                                    style = MaterialTheme.typography.bodyMedium
-                                                )
-                                            }
-                                        }
-                                        if (property!!.landlordRating > 0) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(
-                                                    Icons.Filled.Star,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(16.dp),
-                                                    tint = Color(0xFFFFC107)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    text = "${property!!.landlordRating}/5.0",
-                                                    style = MaterialTheme.typography.bodyMedium
-                                                )
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -493,33 +452,90 @@ fun PropertyDetailScreen(
                                     .padding(16.dp)
                             ) {
                                 property!!.availableFrom?.let { date ->
-                                    Row {
-                                        Text(
-                                            text = "Available from: ",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Medium
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Filled.DateRange,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.primary
                                         )
-                                        Text(
-                                            text = dateFormat.format(date),
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = "Available from",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = dateFormat.format(date),
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
                                     }
                                 }
                                 property!!.availableTo?.let { date ->
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Row {
-                                        Text(
-                                            text = "Available until: ",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Medium
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Filled.Clear,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.error
                                         )
-                                        Text(
-                                            text = dateFormat.format(date),
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = "Available until",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = dateFormat.format(date),
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // Pricing information card
+                    item {
+                        Text(
+                            text = "Pricing",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Monthly Rent",
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = "€${property!!.pricePerMonth.toInt()}",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                         }
@@ -530,7 +546,7 @@ fun PropertyDetailScreen(
     }
 
     // Booking Dialog
-    if (showBookingDialog && property != null) {
+    if (showBookingDialog && property != null && studentId > 0) {
         BookingDialog(
             propertyId = propertyId,
             pricePerMonth = property!!.pricePerMonth,
@@ -542,31 +558,34 @@ fun PropertyDetailScreen(
                     isProcessingBooking = true
                     showBookingDialog = false
 
-                    // Check availability first
-                    val isAvailable = bookingRepository.checkDateAvailability(propertyId, startDate, endDate)
+                    try {
+                        // Check availability first
+                        val isAvailable = bookingRepository.checkDateAvailability(propertyId, startDate, endDate)
 
-                    if (isAvailable) {
-                        // Create booking with the studentId
-                        val success = bookingRepository.createBooking(
-                            propertyId = propertyId,
-                            studentId = studentId,
-                            startDate = startDate,
-                            endDate = endDate,
-                            totalPrice = totalPrice,
-                            messageToLandlord = message
-                        )
+                        if (isAvailable) {
+                            // Create booking with the studentId
+                            val success = bookingRepository.createBooking(
+                                propertyId = propertyId,
+                                studentId = studentId,
+                                startDate = startDate,
+                                endDate = endDate,
+                                totalPrice = totalPrice,
+                                messageToLandlord = message
+                            )
 
-                        if (success) {
-                            snackbarHostState.showSnackbar("Booking request sent successfully!")
-                            bookingMessage = ""
+                            if (success) {
+                                snackbarHostState.showSnackbar("Booking request sent successfully!")
+                            } else {
+                                snackbarHostState.showSnackbar("Failed to send booking request")
+                            }
                         } else {
-                            snackbarHostState.showSnackbar("Failed to send booking request")
+                            snackbarHostState.showSnackbar("Selected dates are not available")
                         }
-                    } else {
-                        snackbarHostState.showSnackbar("Selected dates are not available")
+                    } catch (e: Exception) {
+                        snackbarHostState.showSnackbar("Error creating booking: ${e.message}")
+                    } finally {
+                        isProcessingBooking = false
                     }
-
-                    isProcessingBooking = false
                 }
             }
         )

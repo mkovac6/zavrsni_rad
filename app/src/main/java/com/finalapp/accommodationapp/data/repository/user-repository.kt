@@ -20,7 +20,6 @@ class UserRepository {
 
     suspend fun login(email: String, password: String): User? = withContext(Dispatchers.IO) {
         try {
-            // Query users table - password_hash won't be returned for security
             val userResult = supabase.from("users")
                 .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("user_id", "email", "user_type", "is_profile_complete")) {
                     filter {

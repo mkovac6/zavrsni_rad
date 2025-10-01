@@ -30,41 +30,55 @@ fun StudentBookingsScreen(
     val coroutineScope = rememberCoroutineScope()
     val bookingRepository = remember { BookingRepository() }
     val studentRepository = remember { StudentRepository() }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var selectedTab by remember { mutableStateOf(0) }
+    var studentId by remember { mutableStateOf(0) }
 
     // Load bookings
     LaunchedEffect(Unit) {
         coroutineScope.launch {
             isLoading = true
+            try {
+                // Get student ID
+                val userId = UserSession.currentUser?.userId ?: 0
+                val studentProfile = studentRepository.getStudentProfile(userId)
 
-            // Get student ID
-            val userId = UserSession.currentUser?.userId ?: 0
-            val studentProfile = studentRepository.getStudentProfile(userId)
-
-            if (studentProfile != null) {
-                bookings = bookingRepository.getStudentBookings(studentProfile.studentId)
+                if (studentProfile != null) {
+                    studentId = studentProfile.studentId
+                    bookings = bookingRepository.getStudentBookings(studentProfile.studentId)
+                } else {
+                    snackbarHostState.showSnackbar("Unable to load student profile")
+                }
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Error loading bookings: ${e.message}")
+            } finally {
+                isLoading = false
             }
-
-            isLoading = false
         }
     }
 
     // Filter bookings by status
     val filteredBookings = when (selectedTab) {
         0 -> bookings // All
-        1 -> bookings.filter { it.status == "pending" }
-        2 -> bookings.filter { it.status == "approved" }
-        3 -> bookings.filter { it.status in listOf("rejected", "cancelled") }
+        1 -> bookings.filter { it.status.lowercase() == "pending" }
+        2 -> bookings.filter { it.status.lowercase() == "approved" }
+        3 -> bookings.filter { it.status.lowercase() in listOf("rejected", "cancelled") }
         else -> bookings
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("My Bookings") }
+                title = { Text("My Bookings") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
             )
         },
         bottomBar = {
@@ -100,22 +114,30 @@ fun StudentBookingsScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("All") }
+                    text = {
+                        Text("All (${bookings.size})")
+                    }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Pending") }
+                    text = {
+                        Text("Pending (${bookings.filter { it.status.lowercase() == "pending" }.size})")
+                    }
                 )
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = { Text("Approved") }
+                    text = {
+                        Text("Approved (${bookings.filter { it.status.lowercase() == "approved" }.size})")
+                    }
                 )
                 Tab(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
-                    text = { Text("Rejected") }
+                    text = {
+                        Text("Rejected (${bookings.filter { it.status.lowercase() in listOf("rejected", "cancelled") }.size})")
+                    }
                 )
             }
 
@@ -147,6 +169,16 @@ fun StudentBookingsScreen(
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
+                        Text(
+                            text = when (selectedTab) {
+                                1 -> "You don't have any pending bookings"
+                                2 -> "You don't have any approved bookings"
+                                3 -> "You don't have any rejected bookings"
+                                else -> "You haven't made any bookings yet"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        )
                     }
                 }
             } else {
@@ -158,7 +190,29 @@ fun StudentBookingsScreen(
                     items(filteredBookings) { booking ->
                         BookingCard(
                             booking = booking,
-                            onPropertyClick = { onPropertyClick(booking.propertyId) }
+                            onPropertyClick = { onPropertyClick(booking.propertyId) },
+                            onCancelBooking = if (booking.status.lowercase() == "pending") {
+                                {
+                                    coroutineScope.launch {
+                                        val success = bookingRepository.updateBookingStatus(
+                                            booking.bookingId,
+                                            "cancelled"
+                                        )
+                                        if (success) {
+                                            // Reload bookings
+                                            val studentProfile = studentRepository.getStudentProfile(
+                                                UserSession.currentUser?.userId ?: 0
+                                            )
+                                            if (studentProfile != null) {
+                                                bookings = bookingRepository.getStudentBookings(studentProfile.studentId)
+                                            }
+                                            snackbarHostState.showSnackbar("Booking cancelled successfully")
+                                        } else {
+                                            snackbarHostState.showSnackbar("Failed to cancel booking")
+                                        }
+                                    }
+                                }
+                            } else null
                         )
                     }
                 }
@@ -171,7 +225,8 @@ fun StudentBookingsScreen(
 @Composable
 fun BookingCard(
     booking: Booking,
-    onPropertyClick: () -> Unit
+    onPropertyClick: () -> Unit,
+    onCancelBooking: (() -> Unit)? = null
 ) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
@@ -185,7 +240,7 @@ fun BookingCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Status Badge
+            // Status Badge and Title
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -193,21 +248,23 @@ fun BookingCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = booking.propertyTitle ?: "Property",
+                        text = booking.propertyTitle ?: "Property #${booking.propertyId}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = booking.propertyAddress ?: "",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (!booking.propertyAddress.isNullOrEmpty()) {
+                        Text(
+                            text = booking.propertyAddress,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 StatusBadge(status = booking.status)
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Dates
             Row(
@@ -221,10 +278,16 @@ fun BookingCard(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "${dateFormat.format(booking.startDate)} - ${dateFormat.format(booking.endDate)}",
+                    text = if (booking.startDate != null && booking.endDate != null) {
+                        "${dateFormat.format(booking.startDate)} - ${dateFormat.format(booking.endDate)}"
+                    } else {
+                        "Dates not specified"
+                    },
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
+
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Price
             Row(
@@ -238,38 +301,66 @@ fun BookingCard(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "Total: €${booking.totalPrice}",
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "Total: €${String.format("%.2f", booking.totalPrice)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
                 )
             }
 
-            // Landlord
-            booking.landlordName?.let { landlord ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+            // Message to landlord (if exists and pending)
+            if (!booking.messageToLandlord.isNullOrBlank() && booking.status.lowercase() == "pending") {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
                 ) {
-                    Icon(
-                        Icons.Filled.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Landlord: $landlord",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(
+                        modifier = Modifier.padding(8.dp)
+                    ) {
+                        Text(
+                            text = "Your message:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = booking.messageToLandlord,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
             // Booking date
             booking.createdAt?.let { created ->
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Booked on: ${dateFormat.format(created)}",
+                    text = "Requested on: ${dateFormat.format(created)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            // Cancel button for pending bookings
+            if (onCancelBooking != null && booking.status.lowercase() == "pending") {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onCancelBooking,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(
+                        Icons.Filled.Clear,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Cancel Booking")
+                }
             }
         }
     }
@@ -321,7 +412,7 @@ fun StatusBadge(status: String) {
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = status.capitalize(),
+                text = status.replaceFirstChar { it.uppercase() },
                 style = MaterialTheme.typography.labelMedium,
                 color = contentColor
             )

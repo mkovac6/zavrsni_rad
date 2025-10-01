@@ -102,10 +102,17 @@ class BookingRepository {
                     totalPrice = dto.total_price ?: 0.0,
                     messageToLandlord = dto.message_to_landlord,
                     createdAt = dto.created_at?.let {
-                        try { dateFormat.parse(it) } catch (e: Exception) { null }
+                        try {
+                            // Handle ISO 8601 format from Supabase
+                            val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                            isoFormat.parse(it.split(".")[0])
+                        } catch (e: Exception) { null }
                     },
                     updatedAt = dto.updated_at?.let {
-                        try { dateFormat.parse(it) } catch (e: Exception) { null }
+                        try {
+                            val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                            isoFormat.parse(it.split(".")[0])
+                        } catch (e: Exception) { null }
                     },
                     propertyTitle = property?.title,
                     propertyAddress = property?.address,
@@ -276,77 +283,28 @@ class BookingRepository {
         }
 }
 
-// DTOs for Supabase
-@Serializable
-data class BookingDto(
-    val booking_id: Int,
-    val property_id: Int,
-    val student_id: Int,
-    val start_date: String? = null,
-    val end_date: String? = null,
-    val status: String? = "pending",
-    val total_price: Double? = 0.0,
-    val message_to_landlord: String? = null,
-    val created_at: String? = null,
-    val updated_at: String? = null,
-    val properties: PropertyInfoDto? = null
-)
-
-@Serializable
-data class BookingWithStudentDto(
-    val booking_id: Int,
-    val property_id: Int,
-    val student_id: Int,
-    val start_date: String? = null,
-    val end_date: String? = null,
-    val status: String? = "pending",
-    val total_price: Double? = 0.0,
-    val message_to_landlord: String? = null,
-    val created_at: String? = null,
-    val updated_at: String? = null,
-    val properties: PropertyInfoDto? = null,
-    val students: StudentInfoDto? = null
-)
-
-@Serializable
-data class PropertyInfoDto(
-    val property_id: Int? = null,
-    val title: String? = null,
-    val address: String? = null,
-    val landlord_id: Int? = null,
-    val landlords: LandlordNameDto? = null
-)
-
-@Serializable
-data class LandlordNameDto(
-    val first_name: String,
-    val last_name: String
-)
-
-@Serializable
-data class StudentInfoDto(
-    val first_name: String,
-    val last_name: String
-)
-
-@Serializable
-data class BookingCountDto(
-    val booking_id: Int
-)
-
-@Serializable
-data class BookingDateDto(
-    val booking_id: Int,
-    val start_date: String? = null,
-    val end_date: String? = null,
-    val status: String? = null
-)
-
+// DTOs for Supabase - FIXED with all fields
 @Serializable
 data class SimplePropertyDto(
     val property_id: Int,
+    val landlord_id: Int? = null, // Added this field
     val title: String? = null,
-    val address: String? = null
+    val description: String? = null,
+    val property_type: String? = null,
+    val address: String? = null,
+    val city: String? = null,
+    val postal_code: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val price_per_month: Double? = null,
+    val bedrooms: Int? = null,
+    val bathrooms: Int? = null,
+    val total_capacity: Int? = null,
+    val available_from: String? = null,
+    val available_to: String? = null,
+    val is_active: Boolean? = null,
+    val created_at: String? = null, // Added this field
+    val updated_at: String? = null  // Added this field
 )
 
 @Serializable
@@ -371,4 +329,12 @@ data class SimpleBookingDto(
     val message_to_landlord: String? = null,
     val created_at: String? = null,
     val updated_at: String? = null
+)
+
+@Serializable
+data class BookingDateDto(
+    val booking_id: Int,
+    val start_date: String? = null,
+    val end_date: String? = null,
+    val status: String? = null
 )

@@ -184,43 +184,7 @@ data class SimpleFavoritePropertyDto(
     val total_capacity: Int,
     val available_from: String? = null,
     val available_to: String? = null,
-    val is_active: Boolean? = true
-)
-
-@Serializable
-data class FavoriteWithPropertyDto(
-    val student_id: Int,
-    val property_id: Int,
-    val created_at: String? = null,
-    val properties: PropertyWithLandlordDto? = null
-)
-
-@Serializable
-data class PropertyWithLandlordDto(
-    val property_id: Int,
-    val landlord_id: Int,
-    val title: String,
-    val description: String? = null,
-    val property_type: String,
-    val address: String,
-    val city: String,
-    val postal_code: String? = null,
-    val latitude: Double? = null,
-    val longitude: Double? = null,
-    val price_per_month: Double,
-    val bedrooms: Int,
-    val bathrooms: Int,
-    val total_capacity: Int,
-    val available_from: String? = null,
-    val available_to: String? = null,
     val is_active: Boolean? = true,
-    val landlords: LandlordBasicDto? = null
-)
-
-@Serializable
-data class LandlordBasicDto(
-    val first_name: String,
-    val last_name: String,
-    val phone: String,
-    val rating: Double? = null
+    val created_at: String? = null,  // Added this field
+    val updated_at: String? = null   // Added this field
 )
