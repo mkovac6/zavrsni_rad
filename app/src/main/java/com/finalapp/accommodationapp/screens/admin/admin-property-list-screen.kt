@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -32,11 +33,11 @@ fun AdminPropertyListScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load properties
     LaunchedEffect(Unit) {
         scope.launch {
             isLoading = true
-            properties = propertyRepository.getAllProperties()
+            // Pass includeInactive = true for admin view
+            properties = propertyRepository.getAllProperties(includeInactive = true)
             isLoading = false
         }
     }
@@ -112,17 +113,27 @@ fun AdminPropertyListScreen(
                                 .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val activeCount = properties.count { it.isActive }
+                            val inactiveCount = properties.size - activeCount
+
                             Icon(
                                 Icons.Filled.Home,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "Total Properties: ${properties.size}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column {
+                                Text(
+                                    "Total Properties: ${properties.size}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Active: $activeCount | Inactive: $inactiveCount",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -134,7 +145,25 @@ fun AdminPropertyListScreen(
                             propertyToDelete = property
                             showDeleteDialog = true
                         },
-                        onClick = { onPropertyClick(property.propertyId) }
+                        onClick = { onPropertyClick(property.propertyId) },
+                        onToggleStatus = {
+                            scope.launch {
+                                val success = propertyRepository.updatePropertyStatus(
+                                    property.propertyId,
+                                    !property.isActive
+                                )
+                                if (success) {
+                                    // Reload properties
+                                    properties = propertyRepository.getAllProperties(includeInactive = true)
+                                    snackbarHostState.showSnackbar(
+                                        if (!property.isActive) "Property activated"
+                                        else "Property deactivated"
+                                    )
+                                } else {
+                                    snackbarHostState.showSnackbar("Failed to update property status")
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -162,7 +191,7 @@ fun AdminPropertyListScreen(
 
                                 val success = adminRepository.deleteProperty(property.propertyId)
                                 if (success) {
-                                    properties = propertyRepository.getAllProperties()
+                                    properties = propertyRepository.getAllProperties(includeInactive = true)
                                     snackbarHostState.showSnackbar("Property deleted successfully")
                                 } else {
                                     snackbarHostState.showSnackbar("Failed to delete property")
@@ -193,12 +222,20 @@ fun AdminPropertyListScreen(
 fun AdminPropertyCard(
     property: Property,
     onDelete: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onToggleStatus: () -> Unit
 ) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = if (!property.isActive) {
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        } else {
+            CardDefaults.cardColors()
+        }
     ) {
         Row(
             modifier = Modifier
@@ -207,23 +244,43 @@ fun AdminPropertyCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = property.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = property.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (!property.isActive) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(
+                                text = "INACTIVE",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+
                 Text(
                     text = "${property.address}, ${property.city}",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "Type: ${property.propertyType.capitalize()}",
+                    text = "Type: ${property.propertyType.replaceFirstChar { it.uppercase() }}",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
                     text = "€${property.pricePerMonth.toInt()}/month",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (property.isActive) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
@@ -235,12 +292,22 @@ fun AdminPropertyCard(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error
-                )
+
+            Column {
+                IconButton(onClick = onToggleStatus) {
+                    Icon(
+                        if (property.isActive) Icons.Filled.Check else Icons.Filled.Clear,
+                        contentDescription = if (property.isActive) "Deactivate" else "Activate",
+                        tint = if (property.isActive) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
     }

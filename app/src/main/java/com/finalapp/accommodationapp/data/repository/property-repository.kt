@@ -20,18 +20,24 @@ class PropertyRepository {
     private val supabase = SupabaseClient.client
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
-    suspend fun getAllProperties(): List<Property> = withContext(Dispatchers.IO) {
+    suspend fun getAllProperties(includeInactive: Boolean = false): List<Property> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Fetching all active properties")
+            Log.d(TAG, if (includeInactive) "Fetching all properties (including inactive)" else "Fetching all active properties")
 
-            // First fetch all properties
-            val properties = supabase.from("properties")
-                .select() {
-                    filter {
-                        eq("is_active", true)
+            // First fetch properties based on includeInactive flag
+            val properties = if (includeInactive) {
+                supabase.from("properties")
+                    .select()
+                    .decodeList<SimplePropertyDto>()
+            } else {
+                supabase.from("properties")
+                    .select() {
+                        filter {
+                            eq("is_active", true)
+                        }
                     }
-                }
-                .decodeList<SimplePropertyDto>()
+                    .decodeList<SimplePropertyDto>()
+            }
 
             // Get unique landlord IDs
             val landlordIds = properties.map { it.landlord_id }.distinct()
@@ -443,7 +449,7 @@ data class SimpleLandlordDto(
     val first_name: String,
     val last_name: String,
     val phone: String,
-    val is_verified: Boolean? = null,
+    val is_verified: Boolean? = null,  // Added this field
     val rating: Double? = null,
     val company_name: String? = null,
     val created_at: String? = null,

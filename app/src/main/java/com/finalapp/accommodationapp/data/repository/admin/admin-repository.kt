@@ -490,6 +490,205 @@ class AdminRepository {
             }
         }
 
+    suspend fun debugGetAllStudents(): List<StudentWithUser> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "=== DEBUG GET ALL STUDENTS ===")
+
+            // First, let's check if we can get raw students
+            Log.d(TAG, "Step 1: Getting students from database")
+            val students = try {
+                supabase.from("students")
+                    .select()
+                    .decodeList<StudentDto>()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching students: ${e.message}", e)
+                emptyList<StudentDto>()
+            }
+
+            Log.d(TAG, "Found ${students.size} students in database")
+            students.forEach { student ->
+                Log.d(TAG, "Student: ${student.first_name} ${student.last_name} (ID: ${student.student_id}, UserID: ${student.user_id})")
+            }
+
+            if (students.isEmpty()) {
+                Log.d(TAG, "No students found - returning empty list")
+                return@withContext emptyList()
+            }
+
+            // Step 2: Get user emails
+            Log.d(TAG, "Step 2: Getting user emails")
+            val userIds = students.map { it.user_id }.distinct()
+            Log.d(TAG, "User IDs to fetch: $userIds")
+
+            val users = try {
+                if (userIds.isNotEmpty()) {
+                    val result = supabase.from("users")
+                        .select() {
+                            filter {
+                                isIn("user_id", userIds)
+                            }
+                        }
+                        .decodeList<UserDto>()
+                    Log.d(TAG, "Found ${result.size} users")
+                    result.associateBy { it.user_id }
+                } else {
+                    emptyMap()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching users: ${e.message}", e)
+                emptyMap<Int, UserDto>()
+            }
+
+            // Step 3: Get universities
+            Log.d(TAG, "Step 3: Getting universities")
+            val universityIds = students.map { it.university_id }.distinct()
+            Log.d(TAG, "University IDs to fetch: $universityIds")
+
+            val universities = try {
+                if (universityIds.isNotEmpty()) {
+                    val result = supabase.from("universities")
+                        .select() {
+                            filter {
+                                isIn("university_id", universityIds)
+                            }
+                        }
+                        .decodeList<UniversityDto>()
+                    Log.d(TAG, "Found ${result.size} universities")
+                    result.associateBy { it.university_id }
+                } else {
+                    emptyMap()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching universities: ${e.message}", e)
+                emptyMap<Int, UniversityDto>()
+            }
+
+            // Step 4: Combine the data
+            Log.d(TAG, "Step 4: Combining data")
+            val result = students.map { student ->
+                val user = users[student.user_id]
+                val university = universities[student.university_id]
+
+                Log.d(TAG, "Mapping student ${student.student_id}: user=${user?.email}, university=${university?.name}")
+
+                StudentWithUser(
+                    studentId = student.student_id,
+                    userId = student.user_id,
+                    email = user?.email ?: "",
+                    firstName = student.first_name,
+                    lastName = student.last_name,
+                    phone = student.phone,
+                    studentNumber = student.student_number,
+                    yearOfStudy = student.year_of_study,
+                    program = student.program,
+                    universityName = university?.name ?: "Unknown University",
+                    isProfileComplete = user?.is_profile_complete ?: false
+                )
+            }
+
+            Log.d(TAG, "Successfully mapped ${result.size} students")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in debugGetAllStudents: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    suspend fun debugGetAllLandlords(): List<LandlordWithUser> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "=== DEBUG GET ALL LANDLORDS ===")
+
+            // Get all landlords
+            Log.d(TAG, "Step 1: Getting landlords from database")
+            val landlords = try {
+                supabase.from("landlords")
+                    .select()
+                    .decodeList<LandlordDto>()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching landlords: ${e.message}", e)
+                emptyList<LandlordDto>()
+            }
+
+            Log.d(TAG, "Found ${landlords.size} landlords in database")
+            landlords.forEach { landlord ->
+                Log.d(TAG, "Landlord: ${landlord.first_name} ${landlord.last_name} (ID: ${landlord.landlord_id}, UserID: ${landlord.user_id})")
+            }
+
+            if (landlords.isEmpty()) {
+                Log.d(TAG, "No landlords found - returning empty list")
+                return@withContext emptyList()
+            }
+
+            // Get user emails
+            Log.d(TAG, "Step 2: Getting user emails")
+            val userIds = landlords.map { it.user_id }.distinct()
+            val users = try {
+                if (userIds.isNotEmpty()) {
+                    supabase.from("users")
+                        .select() {
+                            filter {
+                                isIn("user_id", userIds)
+                            }
+                        }
+                        .decodeList<UserDto>()
+                        .associateBy { it.user_id }
+                } else {
+                    emptyMap()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching users: ${e.message}", e)
+                emptyMap<Int, UserDto>()
+            }
+
+            Log.d(TAG, "Found ${users.size} users for landlords")
+
+            // Get property counts
+            Log.d(TAG, "Step 3: Getting property counts")
+            val propertyCountsMap = mutableMapOf<Int, Int>()
+            landlords.forEach { landlord ->
+                try {
+                    val properties = supabase.from("properties")
+                        .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("property_id")) {
+                            filter {
+                                eq("landlord_id", landlord.landlord_id)
+                            }
+                        }
+                        .decodeList<PropertyIdOnlyDto>()
+                    propertyCountsMap[landlord.landlord_id] = properties.size
+                    Log.d(TAG, "Landlord ${landlord.landlord_id} has ${properties.size} properties")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error getting property count for landlord ${landlord.landlord_id}", e)
+                    propertyCountsMap[landlord.landlord_id] = 0
+                }
+            }
+
+            // Combine the data
+            Log.d(TAG, "Step 4: Combining data")
+            val result = landlords.map { landlord ->
+                val user = users[landlord.user_id]
+
+                LandlordWithUser(
+                    landlordId = landlord.landlord_id,
+                    userId = landlord.user_id,
+                    email = user?.email ?: "",
+                    firstName = landlord.first_name,
+                    lastName = landlord.last_name,
+                    companyName = landlord.company_name,
+                    phone = landlord.phone,
+                    isVerified = landlord.is_verified ?: false,
+                    rating = landlord.rating ?: 0.0,
+                    propertyCount = propertyCountsMap[landlord.landlord_id] ?: 0
+                )
+            }
+
+            Log.d(TAG, "Successfully mapped ${result.size} landlords")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in debugGetAllLandlords: ${e.message}", e)
+            emptyList()
+        }
+    }
+
     suspend fun createLandlordWithAccount(
         email: String,
         password: String,
@@ -579,6 +778,7 @@ data class UserDto(
     val user_id: Int,
     val email: String,
     val password_hash: String? = null,
+    val salt: String? = null,
     val user_type: String,
     val is_profile_complete: Boolean,
     val created_at: String? = null,
