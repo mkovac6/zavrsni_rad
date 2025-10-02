@@ -283,11 +283,11 @@ class BookingRepository {
         }
 }
 
-// DTOs for Supabase - FIXED with all fields
+// DTOs for Supabase
 @Serializable
 data class SimplePropertyDto(
     val property_id: Int,
-    val landlord_id: Int? = null, // Added this field
+    val landlord_id: Int? = null,
     val title: String? = null,
     val description: String? = null,
     val property_type: String? = null,

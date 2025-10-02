@@ -39,11 +39,11 @@ fun LoginScreen(
         isLoading = true
         errorMessage = null
 
-        val user = userRepository.login(email.trim(), password)
+        val user = userRepository.debugLogin(email.trim(), password)
 
         if (user != null) {
             UserSession.currentUser = user
-            val firstName = when(user.email) {
+            val firstName = when (user.email) {
                 "ana.kovac@student.hr" -> "Ana"
                 "marko.novak@gmail.com" -> "Marko"
                 "admin@accommodation.com" -> "Admin"
