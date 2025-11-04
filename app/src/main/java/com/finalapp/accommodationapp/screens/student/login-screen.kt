@@ -34,7 +34,6 @@ fun LoginScreen(
     val userRepository = remember { UserRepository() }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Extracted login function
     suspend fun performLogin() {
         isLoading = true
         errorMessage = null
