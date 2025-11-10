@@ -179,15 +179,22 @@ class PropertyRepository {
             try {
                 // Create full address
                 val fullAddress = "$address, $city, Croatia"
+                Log.d("Geocoding", "Attempting to geocode: $fullAddress")
+
                 val encodedAddress = URLEncoder.encode(fullAddress, "UTF-8")
 
+                // Your API key
                 val apiKey = "AIzaSyDR8rQvnIoGF7igmA4C_P1dlFnD6lUhveE"
                 val url = "https://maps.googleapis.com/maps/api/geocode/json?address=$encodedAddress&key=$apiKey"
 
+                // Make the API call
                 val response = URL(url).readText()
                 val jsonObject = JSONObject(response)
 
+                // Log the response status
                 val status = jsonObject.getString("status")
+                Log.d("Geocoding", "API Response status: $status")
+
                 if (status == "OK") {
                     val results = jsonObject.getJSONArray("results")
                     if (results.length() > 0) {
@@ -198,15 +205,19 @@ class PropertyRepository {
                         val lat = location.getDouble("lat")
                         val lng = location.getDouble("lng")
 
+                        Log.d("Geocoding", "Success! Got coordinates: $lat, $lng for $fullAddress")
                         return@withContext Pair(lat, lng)
                     }
+                } else if (status == "REQUEST_DENIED" || status == "OVER_QUERY_LIMIT") {
+                    Log.e("Geocoding", "API error: $status - Using fallback")
                 }
 
-                // If API fails or no results, use fallback
+                // If API fails, use fallback
+                Log.d("Geocoding", "Using fallback coordinates for city: $city")
                 getCityCoordinatesFallback(city)
 
             } catch (e: Exception) {
-                // If any error occurs, use fallback coordinates
+                Log.e("Geocoding", "Error geocoding address: ${e.message}")
                 getCityCoordinatesFallback(city)
             }
         }
