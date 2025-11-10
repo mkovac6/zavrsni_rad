@@ -27,6 +27,7 @@ fun HomeScreen(
     onBookingsClick: () -> Unit,  // Changed from onSearchClick
     onProfileClick: () -> Unit,
     onFavoritesClick: () -> Unit,
+    onMapClick: () -> Unit,
     onLogout: () -> Unit
 ) {
     val propertyRepository = remember { PropertyRepository() }
@@ -90,6 +91,12 @@ fun HomeScreen(
                     label = { Text("Favorites") },
                     selected = false,
                     onClick = onFavoritesClick
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.LocationOn, contentDescription = "Map") },
+                    label = { Text("Map") },
+                    selected = false,
+                    onClick = onMapClick
                 )
             }
         }

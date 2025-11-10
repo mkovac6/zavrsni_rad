@@ -11,6 +11,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.URL
+import java.net.URLEncoder
 
 class PropertyRepository {
     companion object {
@@ -167,6 +171,60 @@ class PropertyRepository {
         } catch (e: Exception) {
             Log.e(TAG, "Error loading property $propertyId: ${e.message}", e)
             null
+        }
+    }
+
+    suspend fun geocodeAddress(address: String, city: String): Pair<Double, Double> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // Create full address
+                val fullAddress = "$address, $city, Croatia"
+                val encodedAddress = URLEncoder.encode(fullAddress, "UTF-8")
+
+                val apiKey = "AIzaSyDR8rQvnIoGF7igmA4C_P1dlFnD6lUhveE"
+                val url = "https://maps.googleapis.com/maps/api/geocode/json?address=$encodedAddress&key=$apiKey"
+
+                val response = URL(url).readText()
+                val jsonObject = JSONObject(response)
+
+                val status = jsonObject.getString("status")
+                if (status == "OK") {
+                    val results = jsonObject.getJSONArray("results")
+                    if (results.length() > 0) {
+                        val location = results.getJSONObject(0)
+                            .getJSONObject("geometry")
+                            .getJSONObject("location")
+
+                        val lat = location.getDouble("lat")
+                        val lng = location.getDouble("lng")
+
+                        return@withContext Pair(lat, lng)
+                    }
+                }
+
+                // If API fails or no results, use fallback
+                getCityCoordinatesFallback(city)
+
+            } catch (e: Exception) {
+                // If any error occurs, use fallback coordinates
+                getCityCoordinatesFallback(city)
+            }
+        }
+    }
+
+    private fun getCityCoordinatesFallback(city: String): Pair<Double, Double> {
+        return when(city.lowercase()) {
+            "zagreb" -> Pair(45.8150, 15.9819)
+            "split" -> Pair(43.5081, 16.4402)
+            "rijeka" -> Pair(45.3271, 14.4422)
+            "osijek" -> Pair(45.5550, 18.6955)
+            "zadar" -> Pair(44.1194, 15.2314)
+            "pula" -> Pair(44.8666, 13.8496)
+            "varaždin" -> Pair(46.3044, 16.3366)
+            "dubrovnik" -> Pair(42.6507, 18.0944)
+            "karlovac" -> Pair(45.4929, 15.5553)
+            "sisak" -> Pair(45.4616, 16.3783)
+            else -> Pair(45.8150, 15.9819) //Zagreb
         }
     }
 

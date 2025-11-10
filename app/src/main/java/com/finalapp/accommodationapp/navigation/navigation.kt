@@ -26,6 +26,7 @@ import com.finalapp.accommodationapp.screens.landlord.LandlordProfileCompletionS
 import com.finalapp.accommodationapp.screens.landlord.LandlordProfileScreen
 import com.finalapp.accommodationapp.screens.student.HomeScreen
 import com.finalapp.accommodationapp.screens.student.LoginScreen
+import com.finalapp.accommodationapp.screens.student.MapScreen
 import com.finalapp.accommodationapp.screens.student.ProfileCompletionScreen
 import com.finalapp.accommodationapp.screens.student.PropertyDetailScreen
 import com.finalapp.accommodationapp.screens.student.StudentBookingsScreen
@@ -127,6 +128,9 @@ fun AppNavigation(
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true }
                     }
+                },
+                onMapClick = {
+                    navController.navigate(Screen.StudentMap.route)
                 }
             )
         }
@@ -371,6 +375,37 @@ fun AppNavigation(
             )
         }
 
+        composable(Screen.StudentMap.route) {
+            MapScreen(
+                onPropertyClick = { propertyId ->
+                    navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
+                },
+                onHomeClick = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.StudentMap.route) { inclusive = true }
+                    }
+                },
+                onBookingsClick = {
+                    navController.navigate(Screen.StudentBookings.route) {
+                        popUpTo(Screen.StudentMap.route) { inclusive = true }
+                    }
+                },
+                onFavoritesClick = {
+                    navController.navigate(Screen.StudentFavorites.route) {
+                        popUpTo(Screen.StudentMap.route) { inclusive = true }
+                    }
+                },
+                onProfileClick = {
+                    navController.navigate(Screen.StudentProfile.route)
+                },
+                onLogout = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Screen.LandlordBookings.route) {
             LandlordBookingManagementScreen(
                 onNavigateBack = {
@@ -459,6 +494,7 @@ sealed class Screen(val route: String) {
     object StudentProfile : Screen("student_profile")
     object StudentBookings : Screen("student_bookings")
     object StudentFavorites : Screen("student_favorites")
+    object StudentMap : Screen("student_map")
 
     //Landlord screens
     object LandlordProfileCompletion : Screen("landlord_profile_completion")

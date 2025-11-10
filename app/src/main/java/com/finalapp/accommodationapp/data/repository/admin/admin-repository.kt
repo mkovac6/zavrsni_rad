@@ -5,6 +5,7 @@ import com.finalapp.accommodationapp.data.SupabaseClient
 import com.finalapp.accommodationapp.data.model.admin.StudentWithUser
 import com.finalapp.accommodationapp.data.model.admin.LandlordWithUser
 import com.finalapp.accommodationapp.data.model.admin.Amenity
+import com.finalapp.accommodationapp.data.repository.PropertyRepository
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -311,6 +312,10 @@ class AdminRepository {
         availableFrom: String
     ): Int = withContext(Dispatchers.IO) {
         try {
+            // Get coordinates using geocoding
+            val propertyRepo = PropertyRepository()
+            val (latitude, longitude) = propertyRepo.geocodeAddress(address, city)
+
             val newProperty = buildJsonObject {
                 put("landlord_id", landlordId)
                 put("title", title)
@@ -319,6 +324,8 @@ class AdminRepository {
                 put("address", address)
                 put("city", city)
                 put("postal_code", postalCode)
+                put("latitude", latitude)  // Added
+                put("longitude", longitude) // Added
                 put("price_per_month", pricePerMonth)
                 put("bedrooms", bedrooms)
                 put("bathrooms", bathrooms)
@@ -329,11 +336,11 @@ class AdminRepository {
 
             val result = supabase.from("properties")
                 .insert(newProperty) {
-                    select()
+                    select(columns = io.github.jan.supabase.postgrest.query.Columns.list("property_id"))
                 }
                 .decodeSingle<PropertyIdOnlyDto>()
 
-            Log.d(TAG, "Created property with ID: ${result.property_id}")
+            Log.d(TAG, "Created property with ID: ${result.property_id} at coordinates: $latitude, $longitude")
             result.property_id
         } catch (e: Exception) {
             Log.e(TAG, "Error creating property: ${e.message}", e)
