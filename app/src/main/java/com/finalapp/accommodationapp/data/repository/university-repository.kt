@@ -15,53 +15,69 @@ class UniversityRepository {
 
     private val supabase = SupabaseClient.client
 
+    /**
+     * Fetch university by ID with coordinates
+     */
+    suspend fun getUniversityById(universityId: Int): University? = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Fetching university with ID: $universityId")
+
+            val result = supabase.from("universities")
+                .select() {
+                    filter {
+                        eq("university_id", universityId)
+                    }
+                }
+                .decodeSingleOrNull<UniversityDto>()
+
+            result?.let {
+                University(
+                    universityId = it.university_id,
+                    name = it.name,
+                    city = it.city ?: "",
+                    country = it.country ?: "Croatia",
+                    latitude = it.latitude ?: 0.0,
+                    longitude = it.longitude ?: 0.0
+                ).also { university ->
+                    Log.d(TAG, "Found university: ${university.name} at (${university.latitude}, ${university.longitude})")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching university $universityId: ${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * Fetch all active universities
+     */
     suspend fun getAllUniversities(): List<University> = withContext(Dispatchers.IO) {
         try {
-            val result = supabase.from("universities")
-                .select {
+            Log.d(TAG, "Fetching all universities")
+
+            val results = supabase.from("universities")
+                .select() {
                     filter {
                         eq("is_active", true)
                     }
                 }
                 .decodeList<UniversityDto>()
 
-            result.map { dto ->
+            results.map { dto ->
                 University(
                     universityId = dto.university_id,
                     name = dto.name,
                     city = dto.city ?: "",
-                    country = dto.country ?: ""
+                    country = dto.country ?: "Croatia",
+                    latitude = dto.latitude ?: 0.0,
+                    longitude = dto.longitude ?: 0.0
                 )
-            }.sortedBy { it.name }.also {
+            }.also {
                 Log.d(TAG, "Loaded ${it.size} universities")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching universities: ${e.message}", e)
             emptyList()
-        }
-    }
-
-    suspend fun getUniversityById(id: Int): University? = withContext(Dispatchers.IO) {
-        try {
-            val result = supabase.from("universities")
-                .select {
-                    filter {
-                        eq("university_id", id)
-                    }
-                }
-                .decodeSingleOrNull<UniversityDto>()
-
-            result?.let { dto ->
-                University(
-                    universityId = dto.university_id,
-                    name = dto.name,
-                    city = dto.city ?: "",
-                    country = dto.country ?: ""
-                )
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching university by id: ${e.message}", e)
-            null
         }
     }
 }
@@ -73,5 +89,9 @@ data class UniversityDto(
     val name: String,
     val city: String? = null,
     val country: String? = null,
-    val is_active: Boolean? = true
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val is_active: Boolean? = true,
+    val created_at: String? = null,
+    val updated_at: String? = null
 )

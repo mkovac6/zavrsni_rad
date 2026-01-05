@@ -4,5 +4,7 @@ data class University(
     val universityId: Int,
     val name: String,
     val city: String,
-    val country: String
+    val country: String,
+    val latitude: Double,
+    val longitude: Double
 )
