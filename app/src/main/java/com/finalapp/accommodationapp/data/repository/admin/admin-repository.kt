@@ -312,9 +312,15 @@ class AdminRepository {
         availableFrom: String
     ): Int = withContext(Dispatchers.IO) {
         try {
+            Log.d(TAG, "=== CREATE PROPERTY START ===")
+            Log.d(TAG, "Address: $address, City: $city")
+
             // Get coordinates using geocoding
+            Log.d(TAG, "About to call geocodeAddress...")
             val propertyRepo = PropertyRepository()
             val (latitude, longitude) = propertyRepo.geocodeAddress(address, city)
+
+            Log.d(TAG, "Geocoding returned: lat=$latitude, lng=$longitude")
 
             val newProperty = buildJsonObject {
                 put("landlord_id", landlordId)
@@ -324,8 +330,8 @@ class AdminRepository {
                 put("address", address)
                 put("city", city)
                 put("postal_code", postalCode)
-                put("latitude", latitude)  // Added
-                put("longitude", longitude) // Added
+                put("latitude", latitude)
+                put("longitude", longitude)
                 put("price_per_month", pricePerMonth)
                 put("bedrooms", bedrooms)
                 put("bathrooms", bathrooms)
@@ -334,16 +340,20 @@ class AdminRepository {
                 put("is_active", true)
             }
 
+            Log.d(TAG, "About to insert property into database...")
             val result = supabase.from("properties")
                 .insert(newProperty) {
                     select(columns = io.github.jan.supabase.postgrest.query.Columns.list("property_id"))
                 }
                 .decodeSingle<PropertyIdOnlyDto>()
 
-            Log.d(TAG, "Created property with ID: ${result.property_id} at coordinates: $latitude, $longitude")
+            Log.d(TAG, "SUCCESS! Created property with ID: ${result.property_id} at coordinates: $latitude, $longitude")
+            Log.d(TAG, "=== CREATE PROPERTY END ===")
             result.property_id
         } catch (e: Exception) {
-            Log.e(TAG, "Error creating property: ${e.message}", e)
+            Log.e(TAG, "ERROR creating property: ${e.message}", e)
+            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
+            Log.e(TAG, "Stack trace: ${e.stackTraceToString()}")
             0
         }
     }
