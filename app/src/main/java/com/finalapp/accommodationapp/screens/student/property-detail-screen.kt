@@ -32,7 +32,8 @@ fun PropertyDetailScreen(
     propertyId: Int,
     onNavigateBack: () -> Unit,
     onBookingClick: () -> Unit,
-    onEditClick: ((Int) -> Unit)? = null
+    onEditClick: ((Int) -> Unit)? = null,
+    onViewLocationClick: ((Property) -> Unit)? = null
 ) {
     val propertyRepository = remember { PropertyRepository() }
     val landlordRepository = remember { LandlordRepository() }
@@ -168,49 +169,43 @@ fun PropertyDetailScreen(
             )
         },
         bottomBar = {
-            property?.let { prop ->
-                // Only show booking bar for students
-                if (UserSession.currentUser?.userType == "student" && studentId > 0) {
-                    BottomAppBar {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+            // Only show booking button for students who are NOT the landlord
+            if (UserSession.currentUser?.userType == "student" && !isLandlordOwner && property != null && studentId > 0) {
+                Surface(
+                    shadowElevation = 8.dp,
+                    tonalElevation = 3.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "€${property!!.pricePerMonth.toInt()}/month",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "View details to book",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Button(
+                            onClick = { showBookingDialog = true },
+                            enabled = !isProcessingBooking
                         ) {
-                            Column {
-                                Text(
-                                    text = "€${prop.pricePerMonth.toInt()}/month",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
+                            if (isProcessingBooking) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary
                                 )
-                                prop.availableFrom?.let { date ->
-                                    val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                                    val isAvailable = date.before(Date()) || date == Date()
-                                    Text(
-                                        text = if (isAvailable) "Available Now" else "Available from ${dateFormat.format(date)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (isAvailable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Button(
-                                onClick = { showBookingDialog = true },
-                                modifier = Modifier.height(48.dp),
-                                enabled = !isProcessingBooking
-                            ) {
-                                if (isProcessingBooking) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Icon(Icons.Filled.DateRange, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Book Now")
-                                }
+                            } else {
+                                Text("Book Now")
                             }
                         }
                     }
@@ -233,10 +228,10 @@ fun PropertyDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
+                        .padding(paddingValues)
                 ) {
                     Column(
+                        modifier = Modifier.fillMaxSize(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -317,7 +312,7 @@ fun PropertyDetailScreen(
                         }
                     }
 
-                    // Location
+                    // Location with Map Button
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -329,53 +324,76 @@ fun PropertyDetailScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(
-                                    Icons.Filled.LocationOn,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = property!!.address,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.LocationOn,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
-                                    Text(
-                                        text = "${property!!.city} ${property!!.postalCode}",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = property!!.address,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = "${property!!.city} ${property!!.postalCode}",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                }
+                                // View on Map button
+                                if (onViewLocationClick != null) {
+                                    FilledTonalIconButton(
+                                        onClick = { onViewLocationClick(property!!) }
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Map,
+                                            contentDescription = "View on Map"
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Key Features
+                    // Property Features
                     item {
                         Text(
-                            text = "Key Features",
+                            text = "Features",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                        Card(
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            FeatureChip(
-                                icon = Icons.Filled.Person,
-                                label = "${property!!.bedrooms} Bedroom${if (property!!.bedrooms > 1) "s" else ""}"
-                            )
-                            FeatureChip(
-                                icon = Icons.Filled.Person,
-                                label = "${property!!.bathrooms} Bathroom${if (property!!.bathrooms > 1) "s" else ""}"
-                            )
-                            FeatureChip(
-                                icon = Icons.Filled.Person,
-                                label = "${property!!.totalCapacity} People"
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                FeatureChip(
+                                    icon = Icons.Filled.Bed,
+                                    label = "${property!!.bedrooms} Beds"
+                                )
+                                FeatureChip(
+                                    icon = Icons.Filled.Bathroom,
+                                    label = "${property!!.bathrooms} Bathrooms"
+                                )
+                                FeatureChip(
+                                    icon = Icons.Filled.Person,
+                                    label = "${property!!.totalCapacity} People"
+                                )
+                            }
                         }
                     }
 
@@ -389,14 +407,11 @@ fun PropertyDetailScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface
-                                )
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
                                     text = property!!.description,
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     modifier = Modifier.padding(16.dp)
                                 )
                             }
@@ -412,29 +427,36 @@ fun PropertyDetailScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            Card(
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                amenities.forEach { amenity ->
-                                    AssistChip(
-                                        onClick = { },
-                                        label = { Text(amenity) },
-                                        leadingIcon = {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    amenities.forEach { amenity ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                             Icon(
                                                 Icons.Filled.Check,
                                                 contentDescription = null,
-                                                modifier = Modifier.size(16.dp)
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = amenity,
+                                                style = MaterialTheme.typography.bodyMedium
                                             )
                                         }
-                                    )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Availability dates
+                    // Availability
                     item {
                         Text(
                             text = "Availability",
@@ -445,16 +467,14 @@ fun PropertyDetailScreen(
                         Card(
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            val dateFormat = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())
                             Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
+                                modifier = Modifier.padding(16.dp)
                             ) {
+                                val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                                 property!!.availableFrom?.let { date ->
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
-                                            Icons.Filled.DateRange,
+                                            Icons.Filled.CheckCircle,
                                             contentDescription = null,
                                             modifier = Modifier.size(20.dp),
                                             tint = MaterialTheme.colorScheme.primary

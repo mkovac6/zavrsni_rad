@@ -443,26 +443,39 @@ class AdminRepository {
         }
     }
 
-    suspend fun addUniversity(name: String, city: String, country: String): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                val newUniversity = buildJsonObject {
-                    put("name", name)
-                    put("city", city)
-                    put("country", country)
-                    put("is_active", true)
-                }
+    suspend fun addUniversity(
+        name: String,
+        city: String,
+        country: String = "Croatia",
+        address: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // Geocode the university location
+            val propertyRepo = PropertyRepository()
+            val searchAddress = address ?: "$name, $city"
+            val (latitude, longitude) = propertyRepo.geocodeAddress(searchAddress, city)
 
-                supabase.from("universities")
-                    .insert(newUniversity)
+            Log.d(TAG, "Geocoded $name to: ($latitude, $longitude)")
 
-                Log.d(TAG, "Added new university: $name")
-                true
-            } catch (e: Exception) {
-                Log.e(TAG, "Error adding university: ${e.message}", e)
-                false
+            val newUniversity = buildJsonObject {
+                put("name", name)
+                put("city", city)
+                put("country", country)
+                put("latitude", latitude)
+                put("longitude", longitude)
+                put("is_active", true)
             }
+
+            supabase.from("universities")
+                .insert(newUniversity)
+
+            Log.d(TAG, "Added new university: $name at ($latitude, $longitude)")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding university: ${e.message}", e)
+            false
         }
+    }
 
     suspend fun getAllAmenities(): List<Amenity> = withContext(Dispatchers.IO) {
         try {

@@ -34,6 +34,8 @@ import com.finalapp.accommodationapp.screens.student.StudentEditProfileScreen
 import com.finalapp.accommodationapp.screens.student.StudentFavoritesScreen
 import com.finalapp.accommodationapp.screens.student.StudentProfileScreen
 import com.finalapp.accommodationapp.screens.student.UniversitySelectionScreen
+import com.finalapp.accommodationapp.screens.student.PropertyLocationMapScreen
+import com.finalapp.accommodationapp.data.model.Property
 
 @Composable
 fun AppNavigation(
@@ -152,7 +154,10 @@ fun AppNavigation(
                     { id ->
                         navController.navigate("${Screen.LandlordEditProperty.route}/$id")
                     }
-                } else null
+                } else null,
+                onViewLocationClick = { property ->
+                    navController.navigate("${Screen.PropertyLocationMap.route}/${property.propertyId}")
+                }
             )
         }
 
@@ -406,6 +411,19 @@ fun AppNavigation(
             )
         }
 
+        composable(
+            "${Screen.PropertyLocationMap.route}/{propertyId}",
+            arguments = listOf(navArgument("propertyId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val propertyId = backStackEntry.arguments?.getInt("propertyId") ?: 0
+            PropertyLocationMapScreen(
+                propertyId = propertyId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
         composable(Screen.LandlordBookings.route) {
             LandlordBookingManagementScreen(
                 onNavigateBack = {
@@ -495,6 +513,7 @@ sealed class Screen(val route: String) {
     object StudentBookings : Screen("student_bookings")
     object StudentFavorites : Screen("student_favorites")
     object StudentMap : Screen("student_map")
+    object PropertyLocationMap : Screen("property_location_map")
 
     //Landlord screens
     object LandlordProfileCompletion : Screen("landlord_profile_completion")
