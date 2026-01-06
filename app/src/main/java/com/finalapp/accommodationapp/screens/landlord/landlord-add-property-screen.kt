@@ -1,5 +1,6 @@
 package com.finalapp.accommodationapp.screens.landlord
 
+import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -19,8 +21,10 @@ import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
+import com.finalapp.accommodationapp.data.repository.PropertyImageRepository
 import com.finalapp.accommodationapp.data.model.admin.Amenity
 import com.finalapp.accommodationapp.data.UserSession
+import com.finalapp.accommodationapp.screens.components.MultiImagePicker
 import java.text.DateFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.*
@@ -57,10 +61,14 @@ fun LandlordAddPropertyScreen(
     var totalCapacity by remember { mutableStateOf("1") }
     var availableFrom by remember { mutableStateOf("") }
     var selectedAmenities by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showPastDateWarning by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
+    var isUploadingImages by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
 
     // Load landlord info and amenities
     LaunchedEffect(Unit) {
@@ -365,6 +373,29 @@ fun LandlordAddPropertyScreen(
                     }
                 }
 
+                // Property Images
+                item {
+                    Divider()
+                    Text(
+                        text = "Property Images",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "Add 5-10 high-quality images (optional but recommended)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                item {
+                    MultiImagePicker(
+                        selectedImages = selectedImageUris,
+                        onImagesSelected = { selectedImageUris = it },
+                        maxImages = 10,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
                 // Submit Button
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -418,9 +449,19 @@ fun LandlordAddPropertyScreen(
                                         )
 
                                         if (propertyId > 0) {
+                                            // Add amenities
                                             if (selectedAmenities.isNotEmpty()) {
                                                 adminRepository.addPropertyAmenities(propertyId, selectedAmenities.toList())
                                             }
+
+                                            // Upload images
+                                            if (selectedImageUris.isNotEmpty()) {
+                                                isUploadingImages = true
+                                                val imageRepository = PropertyImageRepository(context)
+                                                imageRepository.uploadMultipleImages(propertyId, selectedImageUris)
+                                                isUploadingImages = false
+                                            }
+
                                             snackbarHostState.showSnackbar("Property created successfully!")
                                             onPropertyAdded()
                                         } else {
@@ -435,13 +476,21 @@ fun LandlordAddPropertyScreen(
                                 }
                             }
                         },
-                        enabled = isFormValid && !isSubmitting,
+                        enabled = isFormValid && !isSubmitting && !isUploadingImages,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        if (isSubmitting) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp))
-                        } else {
-                            Text("Create Property")
+                        when {
+                            isUploadingImages -> {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Uploading images...")
+                            }
+                            isSubmitting -> {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Creating property...")
+                            }
+                            else -> Text("Create Property")
                         }
                     }
                 }
@@ -502,9 +551,19 @@ fun LandlordAddPropertyScreen(
                                     val propertyRepository = PropertyRepository()
                                     propertyRepository.updatePropertyStatus(propertyId, false)
 
+                                    // Add amenities
                                     if (selectedAmenities.isNotEmpty()) {
                                         adminRepository.addPropertyAmenities(propertyId, selectedAmenities.toList())
                                     }
+
+                                    // Upload images
+                                    if (selectedImageUris.isNotEmpty()) {
+                                        isUploadingImages = true
+                                        val imageRepository = PropertyImageRepository(context)
+                                        imageRepository.uploadMultipleImages(propertyId, selectedImageUris)
+                                        isUploadingImages = false
+                                    }
+
                                     snackbarHostState.showSnackbar("Property created as INACTIVE due to past availability date")
                                     onPropertyAdded()
                                 } else {

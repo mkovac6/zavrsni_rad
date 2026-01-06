@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew assembleDebug:*)",
+      "Bash(where:*)",
+      "Bash(if exist \"C:\\\\Program Files\\\\Java\" dir \"C:\\\\Program Files\\\\Java\" /b)",
+      "Bash(if exist \"C:\\\\Program Files \\(x86\\)\\\\Java\" dir \"C:\\\\Program Files \\(x86\\)\\\\Java\" /b)",
+      "Bash(java -version:*)",
+      "Bash(\"/c/Program Files/Java/jdk-17/bin/java.exe\" -version)",
+      "Bash(./gradlew:*)",
+      "Bash(echo:*)",
+      "Bash(adb logcat:*)"
+    ]
+  }
+}

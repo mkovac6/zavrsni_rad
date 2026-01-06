@@ -22,6 +22,7 @@ import com.finalapp.accommodationapp.data.repository.student.StudentRepository
 import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.screens.components.BookingDialog
+import com.finalapp.accommodationapp.screens.components.PropertyImageCarousel
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.Date
@@ -264,6 +265,15 @@ fun PropertyDetailScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Property Image Carousel
+                    item {
+                        PropertyImageCarousel(
+                            imageUrls = property!!.imageUrls,
+                            modifier = Modifier.fillMaxWidth(),
+                            height = 300
+                        )
+                    }
+
                     // Property Title and Type
                     item {
                         Column {

@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
 import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.UserSession
+import com.finalapp.accommodationapp.screens.components.PropertyThumbnail
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -186,111 +187,122 @@ fun PropertyCard(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Property Thumbnail
+            PropertyThumbnail(
+                imageUrl = property.primaryImageUrl,
+                modifier = Modifier
+                    .size(100.dp)
+                    .padding(8.dp)
+            )
+
+            // Property Details Column
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 8.dp, horizontal = 8.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = property.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.LocationOn,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${property.address}, ${property.city}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     Text(
-                        text = property.title,
+                        text = "€${property.pricePerMonth.toInt()}/month",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Property details
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    PropertyDetail(
+                        icon = Icons.Filled.Home,
+                        text = property.propertyType.capitalize()
+                    )
+                    PropertyDetail(
+                        icon = Icons.Filled.Person,
+                        text = "${property.bedrooms} bed"
+                    )
+                    PropertyDetail(
+                        icon = Icons.Filled.Person,
+                        text = "${property.totalCapacity} people"
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Landlord info
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = property.landlordName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (property.landlordRating > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
                         Icon(
-                            Icons.Filled.LocationOn,
+                            Icons.Filled.Star,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = Color(0xFFFFC107)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${property.address}, ${property.city}",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = property.landlordRating.toString(),
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-                Text(
-                    text = "€${property.pricePerMonth.toInt()}/month",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Property details
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                PropertyDetail(
-                    icon = Icons.Filled.Home,
-                    text = property.propertyType.capitalize()
-                )
-                PropertyDetail(
-                    icon = Icons.Filled.Person,
-                    text = "${property.bedrooms} bed"
-                )
-                PropertyDetail(
-                    icon = Icons.Filled.Person,
-                    text = "${property.totalCapacity} people"
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Landlord info
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Filled.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = property.landlordName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (property.landlordRating > 0) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        Icons.Filled.Star,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = Color(0xFFFFC107)
-                    )
+                // Available from
+                property.availableFrom?.let { date ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                     Text(
-                        text = property.landlordRating.toString(),
+                        text = "Available from ${dateFormat.format(date)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
-            }
-
-            // Available from
-            property.availableFrom?.let { date ->
-                Spacer(modifier = Modifier.height(8.dp))
-                val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                Text(
-                    text = "Available from ${dateFormat.format(date)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
             }
         }
     }

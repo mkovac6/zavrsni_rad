@@ -22,5 +22,7 @@ data class Property(
     val landlordPhone: String,
     val landlordRating: Double,
     val companyName: String? = null,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val imageUrls: List<String> = emptyList(),
+    val primaryImageUrl: String? = null
 )

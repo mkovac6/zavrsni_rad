@@ -61,9 +61,29 @@ class PropertyRepository {
                 emptyMap()
             }
 
-            // Map properties with landlord info
+            // Get unique property IDs
+            val propertyIds = properties.map { it.property_id }.distinct()
+
+            // Fetch images for all properties
+            val imagesMap = if (propertyIds.isNotEmpty()) {
+                val allImages = supabase.from("propertyimages")
+                    .select() {
+                        filter {
+                            isIn("property_id", propertyIds)
+                        }
+                    }
+                    .decodeList<PropertyImageDto>()
+
+                allImages.groupBy { it.property_id }
+            } else {
+                emptyMap()
+            }
+
+            // Map properties with landlord info and images
             val result = properties.map { dto ->
                 val landlord = landlordMap[dto.landlord_id]
+                val propertyImages = imagesMap[dto.property_id]?.sortedBy { it.display_order ?: 0 } ?: emptyList()
+
                 Property(
                     propertyId = dto.property_id,
                     title = dto.title,
@@ -92,7 +112,10 @@ class PropertyRepository {
                     },
                     landlordPhone = landlord?.phone ?: "",
                     landlordRating = landlord?.rating ?: 0.0,
-                    companyName = landlord?.company_name
+                    companyName = landlord?.company_name,
+                    imageUrls = propertyImages.map { it.image_url },
+                    primaryImageUrl = propertyImages.firstOrNull { it.is_primary == true }?.image_url
+                        ?: propertyImages.firstOrNull()?.image_url
                 )
             }
 
@@ -136,6 +159,21 @@ class PropertyRepository {
                 null
             }
 
+            // Fetch images
+            val images = try {
+                supabase.from("propertyimages")
+                    .select() {
+                        filter {
+                            eq("property_id", propertyId)
+                        }
+                    }
+                    .decodeList<PropertyImageDto>()
+                    .sortedBy { it.display_order ?: 0 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching images: ${e.message}")
+                emptyList()
+            }
+
             Property(
                 propertyId = property.property_id,
                 title = property.title,
@@ -164,7 +202,10 @@ class PropertyRepository {
                 },
                 landlordPhone = landlord?.phone ?: "",
                 landlordRating = landlord?.rating ?: 0.0,
-                companyName = landlord?.company_name
+                companyName = landlord?.company_name,
+                imageUrls = images.map { it.image_url },
+                primaryImageUrl = images.firstOrNull { it.is_primary == true }?.image_url
+                    ?: images.firstOrNull()?.image_url
             ).also {
                 Log.d(TAG, "Successfully loaded property: ${it.title} with landlord: ${it.landlordName}")
             }
@@ -536,3 +577,13 @@ data class PropertyAmenityDto(val amenity_id: Int)
 
 @Serializable
 data class LandlordIdDto(val landlord_id: Int)
+
+@Serializable
+data class PropertyImageDto(
+    val image_id: Int,
+    val property_id: Int,
+    val image_url: String,
+    val is_primary: Boolean? = false,
+    val display_order: Int? = 0,
+    val uploaded_at: String? = null
+)
