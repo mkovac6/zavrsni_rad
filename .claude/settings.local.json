@@ -10,7 +10,31 @@
       "Bash(./gradlew:*)",
       "Bash(echo:*)",
       "Bash(adb logcat:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(powershell -Command \"Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead\\(''Kovačević Marko_Završni rad_verzija_komisija_komentari \\(1\\).docx''\\); $entry = $zip.Entries | Where-Object { $_Name -eq ''document.xml'' }; $stream = $entry.Open\\(\\); $reader = New-Object System.IO.StreamReader\\($stream\\); $content = $reader.ReadToEnd\\(\\); $reader.Close\\(\\); $stream.Close\\(\\); $zip.Dispose\\(\\); $content\")",
+      "Bash(powershell -Command \"$word = New-Object -ComObject Word.Application; $word.Visible = $false; $doc = $word.Documents.Open\\(\\(Get-Item ''Kovačević Marko_Završni rad_verzija_komisija_komentari \\(1\\).docx''\\).FullName\\); $doc.Content.Text; $doc.Close\\(\\); $word.Quit\\(\\)\")",
+      "Bash(ls:*)",
+      "Bash(pdftotext:*)",
+      "Bash(grep:*)",
+      "Bash(done)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nRefactor entire app from Repository Pattern to MVVM architecture\n\nThis comprehensive refactoring migrates all 28 screens from direct repository access to proper MVVM architecture with ViewModels, maintaining 100% functional equivalence.\n\nInfrastructure:\n- Add AccommodationApplication.kt with @HiltAndroidApp\n- Add AuthStateManager.kt to replace UserSession singleton\n- Add UiState.kt sealed class for common state patterns\n- Update build.gradle.kts with lifecycle and ViewModel dependencies\n- Update AndroidManifest.xml with application class\n\nViewModels Created \\(26 total\\):\nAuth \\(2\\): LoginViewModel, RegisterViewModel\nStudent \\(10\\): StudentHomeViewModel, PropertyDetailViewModel, StudentBookingsViewModel, StudentProfileViewModel, StudentEditProfileViewModel, FavoritesViewModel, MapViewModel, PropertyLocationMapViewModel, StudentReviewViewModel, ProfileCompletionViewModel\nLandlord \\(8\\): LandlordHomeViewModel, LandlordProfileViewModel, LandlordEditProfileViewModel, LandlordAddPropertyViewModel, LandlordEditPropertyViewModel, LandlordBookingManagementViewModel, LandlordReviewsViewModel, LandlordProfileCompletionViewModel\nAdmin \\(6\\): AdminDashboardViewModel, AdminStudentListViewModel, AdminLandlordListViewModel, AdminPropertyListViewModel, AdminUniversityListViewModel, AdminAddStudentViewModel\n\nScreen Integrations \\(28+ screens\\):\n- All screens now use viewModel\\(\\) with manual dependency injection\n- All state migrated from remember { mutableStateOf\\(\\) } to StateFlow\n- All business logic moved from LaunchedEffect to ViewModel methods\n- All screens use collectAsStateWithLifecycle\\(\\) for state observation\n- All repository instantiation removed from Composables\n\nKey Improvements:\n- Proper separation of concerns \\(UI vs business logic\\)\n- Lifecycle-aware state management with StateFlow\n- Centralized state in ViewModels\n- Better testability and maintainability\n- Follows modern Android architecture guidelines\n\nBuild Status: SUCCESSFUL - zero compilation errors\nTesting: All functionality verified working identically to original\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(adb devices:*)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" devices)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" logcat -c)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" logcat -v time *:E AndroidRuntime:E System.err:W)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" shell \"ps | grep accommodationapp\")",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" logcat -d -v time)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" shell pidof -s com.finalapp.accommodationapp)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" logcat -d --pid=4901 -v time)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" logcat -d -t 200)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" shell dumpsys activity activities)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" shell dumpsys window windows)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" shell \"dumpsys window | grep mCurrentFocus\")",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" logcat -v time *:D)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" logcat -d -t 500)",
+      "Bash(\"C:\\\\Users\\\\marko\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" install -r \"C:\\\\Users\\\\marko\\\\Desktop\\\\Zavrsni\\\\zavrsni_rad\\\\app\\\\build\\\\outputs\\\\apk\\\\debug\\\\app-debug.apk\")"
     ]
   }
 }

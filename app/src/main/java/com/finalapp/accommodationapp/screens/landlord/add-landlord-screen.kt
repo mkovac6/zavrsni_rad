@@ -14,41 +14,34 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.repository.UserRepository
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
+import com.finalapp.accommodationapp.ui.viewmodels.admin.AdminAddLandlordViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddLandlordScreen(
     onNavigateBack: () -> Unit,
-    onLandlordAdded: () -> Unit
+    onLandlordAdded: () -> Unit,
+    viewModel: AdminAddLandlordViewModel = viewModel {
+        AdminAddLandlordViewModel(
+            userRepository = UserRepository(),
+            adminRepository = AdminRepository()
+        )
+    }
 ) {
-    val userRepository = remember { UserRepository() }
-    val adminRepository = remember { AdminRepository() }
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Form states
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var companyName by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var isVerified by remember { mutableStateOf(false) }
-
-    var isLoading by remember { mutableStateOf(false) }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var confirmPasswordVisible by remember { mutableStateOf(false) }
-
-    // Validation
-    val isEmailValid = email.contains("@") && email.contains(".")
-    val isPasswordValid = password.length >= 6
-    val doPasswordsMatch = password == confirmPassword && password.isNotEmpty()
-    val isFormValid = isEmailValid && isPasswordValid && doPasswordsMatch &&
-            firstName.isNotBlank() && lastName.isNotBlank() && phone.isNotBlank()
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -78,14 +71,14 @@ fun AddLandlordScreen(
             )
 
             OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
+                value = uiState.formState.email,
+                onValueChange = { viewModel.updateEmail(it) },
                 label = { Text("Email") },
                 leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                isError = email.isNotEmpty() && !isEmailValid,
+                isError = uiState.formState.email.isNotEmpty() && !viewModel.isEmailValid,
                 supportingText = {
-                    if (email.isNotEmpty() && !isEmailValid) {
+                    if (uiState.formState.email.isNotEmpty() && !viewModel.isEmailValid) {
                         Text("Please enter a valid email address")
                     }
                 },
@@ -93,23 +86,23 @@ fun AddLandlordScreen(
             )
 
             OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
+                value = uiState.formState.password,
+                onValueChange = { viewModel.updatePassword(it) },
                 label = { Text("Password") },
                 leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                visualTransformation = if (uiState.passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    IconButton(onClick = { viewModel.togglePasswordVisibility() }) {
                         Icon(
                             Icons.Filled.Lock,
-                            contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                            contentDescription = if (uiState.passwordVisible) "Hide password" else "Show password"
                         )
                     }
                 },
-                isError = password.isNotEmpty() && !isPasswordValid,
+                isError = uiState.formState.password.isNotEmpty() && !viewModel.isPasswordValid,
                 supportingText = {
-                    if (password.isNotEmpty() && !isPasswordValid) {
+                    if (uiState.formState.password.isNotEmpty() && !viewModel.isPasswordValid) {
                         Text("Password must be at least 6 characters")
                     }
                 },
@@ -117,23 +110,23 @@ fun AddLandlordScreen(
             )
 
             OutlinedTextField(
-                value = confirmPassword,
-                onValueChange = { confirmPassword = it },
+                value = uiState.formState.confirmPassword,
+                onValueChange = { viewModel.updateConfirmPassword(it) },
                 label = { Text("Confirm Password") },
                 leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
-                visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                visualTransformation = if (uiState.confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 trailingIcon = {
-                    IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                    IconButton(onClick = { viewModel.toggleConfirmPasswordVisibility() }) {
                         Icon(
                             Icons.Filled.Lock,
-                            contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
+                            contentDescription = if (uiState.confirmPasswordVisible) "Hide password" else "Show password"
                         )
                     }
                 },
-                isError = confirmPassword.isNotEmpty() && !doPasswordsMatch,
+                isError = uiState.formState.confirmPassword.isNotEmpty() && !viewModel.doPasswordsMatch,
                 supportingText = {
-                    if (confirmPassword.isNotEmpty() && !doPasswordsMatch) {
+                    if (uiState.formState.confirmPassword.isNotEmpty() && !viewModel.doPasswordsMatch) {
                         Text("Passwords do not match")
                     }
                 },
@@ -149,32 +142,32 @@ fun AddLandlordScreen(
             )
 
             OutlinedTextField(
-                value = firstName,
-                onValueChange = { firstName = it },
+                value = uiState.formState.firstName,
+                onValueChange = { viewModel.updateFirstName(it) },
                 label = { Text("First Name *") },
                 leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
-                value = lastName,
-                onValueChange = { lastName = it },
+                value = uiState.formState.lastName,
+                onValueChange = { viewModel.updateLastName(it) },
                 label = { Text("Last Name *") },
                 leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
-                value = companyName,
-                onValueChange = { companyName = it },
+                value = uiState.formState.companyName,
+                onValueChange = { viewModel.updateCompanyName(it) },
                 label = { Text("Company Name (Optional)") },
                 leadingIcon = { Icon(Icons.Filled.Home, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
-                value = phone,
-                onValueChange = { phone = it },
+                value = uiState.formState.phone,
+                onValueChange = { viewModel.updatePhone(it) },
                 label = { Text("Phone Number *") },
                 leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
@@ -187,8 +180,8 @@ fun AddLandlordScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Checkbox(
-                    checked = isVerified,
-                    onCheckedChange = { isVerified = it }
+                    checked = uiState.formState.isVerified,
+                    onCheckedChange = { viewModel.toggleVerified() }
                 )
                 Text("Mark as verified landlord")
             }
@@ -198,35 +191,16 @@ fun AddLandlordScreen(
             // Submit Button
             Button(
                 onClick = {
-                    scope.launch {
-                        isLoading = true
-
-                        // Create user account and get the user
-                        val success = adminRepository.createLandlordWithAccount(
-                            email = email,
-                            password = password,
-                            firstName = firstName.trim(),
-                            lastName = lastName.trim(),
-                            companyName = companyName.trim().ifEmpty { null },
-                            phone = phone.trim(),
-                            isVerified = isVerified
-                        )
-
-                        if (success) {
-                            snackbarHostState.showSnackbar("Landlord created successfully!")
-                            onLandlordAdded()
-                        } else {
-                            snackbarHostState.showSnackbar("Failed to create landlord - email may already exist")
-                        }
-
-                        isLoading = false
-                    }
+                    viewModel.createLandlord(onSuccess = onLandlordAdded)
                 },
-                enabled = isFormValid && !isLoading,
+                enabled = viewModel.isFormValid && !uiState.isLoading,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
                 } else {
                     Text("Create Landlord")
                 }

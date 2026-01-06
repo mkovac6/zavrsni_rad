@@ -88,7 +88,8 @@ class RegisterViewModel(
             )
 
             if (user != null) {
-                // Replace UserSession with AuthStateManager
+                // Set both UserSession (for backward compatibility) and AuthStateManager
+                com.finalapp.accommodationapp.data.UserSession.currentUser = user
                 authStateManager.setUser(user)
 
                 _uiState.value = _uiState.value.copy(

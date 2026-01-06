@@ -10,42 +10,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.model.University
 import com.finalapp.accommodationapp.data.repository.UniversityRepository
-import kotlinx.coroutines.launch
+import com.finalapp.accommodationapp.ui.viewmodels.student.UniversitySelectionViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UniversitySelectionScreen(
     onUniversitySelected: (Int) -> Unit, // Now passes university ID
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: UniversitySelectionViewModel = viewModel {
+        UniversitySelectionViewModel(
+            universityRepository = UniversityRepository()
+        )
+    }
 ) {
-    var selectedUniversity by remember { mutableStateOf<University?>(null) }
-    var universities by remember { mutableStateOf<List<University>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    val coroutineScope = rememberCoroutineScope()
-    val universityRepository = remember { UniversityRepository() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load universities when screen opens
-    LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            isLoading = true
-            try {
-                universities = universityRepository.getAllUniversities()
-                if (universities.isEmpty()) {
-                    errorMessage = "No universities found"
-                }
-            } catch (e: Exception) {
-                errorMessage = "Failed to load universities"
-                snackbarHostState.showSnackbar(
-                    message = "Error loading universities. Please try again.",
-                    duration = SnackbarDuration.Short
-                )
-            }
-            isLoading = false
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
         }
     }
 
@@ -72,10 +61,10 @@ fun UniversitySelectionScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Debug info - remove later
-            if (universities.isNotEmpty()) {
+            // Debug info
+            if (uiState.universities.isNotEmpty()) {
                 Text(
-                    text = "Loaded ${universities.size} universities from database",
+                    text = "Loaded ${uiState.universities.size} universities from database",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -84,7 +73,7 @@ fun UniversitySelectionScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             when {
-                isLoading -> {
+                uiState.isLoading -> {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -95,7 +84,7 @@ fun UniversitySelectionScreen(
                     }
                 }
 
-                errorMessage != null -> {
+                uiState.errorMessage != null -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -103,7 +92,7 @@ fun UniversitySelectionScreen(
                         )
                     ) {
                         Text(
-                            text = errorMessage!!,
+                            text = uiState.errorMessage!!,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.padding(16.dp)
                         )
@@ -115,12 +104,12 @@ fun UniversitySelectionScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(universities) { university ->
+                        items(uiState.universities) { university ->
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                onClick = { selectedUniversity = university },
+                                onClick = { viewModel.selectUniversity(university) },
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (selectedUniversity?.universityId == university.universityId) {
+                                    containerColor = if (uiState.selectedUniversity?.universityId == university.universityId) {
                                         MaterialTheme.colorScheme.primaryContainer
                                     } else {
                                         MaterialTheme.colorScheme.surface
@@ -145,7 +134,7 @@ fun UniversitySelectionScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    if (selectedUniversity?.universityId == university.universityId) {
+                                    if (uiState.selectedUniversity?.universityId == university.universityId) {
                                         Text(
                                             "✓",
                                             color = MaterialTheme.colorScheme.primary,
@@ -163,18 +152,12 @@ fun UniversitySelectionScreen(
 
             Button(
                 onClick = {
-                    selectedUniversity?.let { university ->
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = "Selected: ${university.name}",
-                                duration = SnackbarDuration.Short
-                            )
-                        }
+                    uiState.selectedUniversity?.let { university ->
                         onUniversitySelected(university.universityId)
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = selectedUniversity != null && !isLoading
+                enabled = uiState.selectedUniversity != null && !uiState.isLoading
             ) {
                 Text("Continue")
             }

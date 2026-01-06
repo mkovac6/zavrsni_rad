@@ -39,7 +39,19 @@ fun HomeScreen(
     }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val filteredProperties = viewModel.filteredProperties
+
+    // Compute filtered properties from the collected state
+    val filteredProperties = remember(uiState.properties, uiState.searchQuery) {
+        if (uiState.searchQuery.isEmpty()) {
+            uiState.properties
+        } else {
+            uiState.properties.filter { property ->
+                property.title.contains(uiState.searchQuery, ignoreCase = true) ||
+                property.city.contains(uiState.searchQuery, ignoreCase = true) ||
+                property.address.contains(uiState.searchQuery, ignoreCase = true)
+            }
+        }
+    }
 
     Scaffold(
         topBar = {

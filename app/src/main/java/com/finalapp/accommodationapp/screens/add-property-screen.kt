@@ -13,65 +13,35 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.model.admin.LandlordWithUser
 import com.finalapp.accommodationapp.data.model.admin.Amenity
+import com.finalapp.accommodationapp.ui.viewmodels.admin.AdminAddPropertyViewModel
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddPropertyScreen(
     onNavigateBack: () -> Unit,
-    onPropertyAdded: () -> Unit
+    onPropertyAdded: () -> Unit,
+    viewModel: AdminAddPropertyViewModel = viewModel {
+        AdminAddPropertyViewModel(
+            adminRepository = AdminRepository()
+        )
+    }
 ) {
-    val adminRepository = remember { AdminRepository() }
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load data
-    var landlords by remember { mutableStateOf<List<LandlordWithUser>>(emptyList()) }
-    var amenities by remember { mutableStateOf<List<Amenity>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    // Form states
-    var selectedLandlordId by remember { mutableStateOf<Int?>(null) }
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var propertyType by remember { mutableStateOf("apartment") }
-    var address by remember { mutableStateOf("") }
-    var city by remember { mutableStateOf("") }
-    var postalCode by remember { mutableStateOf("") }
-    var pricePerMonth by remember { mutableStateOf("") }
-    var bedrooms by remember { mutableStateOf("1") }
-    var bathrooms by remember { mutableStateOf("1") }
-    var totalCapacity by remember { mutableStateOf("1") }
-    var availableFrom by remember { mutableStateOf("") }
-    var selectedAmenities by remember { mutableStateOf<Set<Int>>(emptySet()) }
-
-    var showLandlordDropdown by remember { mutableStateOf(false) }
-    var showDatePicker by remember { mutableStateOf(false) }
-    var isSubmitting by remember { mutableStateOf(false) }
-
-    // Load landlords and amenities
-    LaunchedEffect(Unit) {
-        scope.launch {
-            isLoading = true
-            landlords = adminRepository.getAllLandlords()
-            amenities = adminRepository.getAllAmenities()
-            isLoading = false
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
         }
     }
-
-    // Validation
-    val isFormValid = selectedLandlordId != null &&
-            title.isNotBlank() &&
-            address.isNotBlank() &&
-            city.isNotBlank() &&
-            pricePerMonth.toDoubleOrNull() != null &&
-            bedrooms.toIntOrNull() != null &&
-            bathrooms.toIntOrNull() != null &&
-            totalCapacity.toIntOrNull() != null
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -86,7 +56,7 @@ fun AddPropertyScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -111,27 +81,27 @@ fun AddPropertyScreen(
                     )
 
                     ExposedDropdownMenuBox(
-                        expanded = showLandlordDropdown,
-                        onExpandedChange = { showLandlordDropdown = it }
+                        expanded = uiState.showLandlordDropdown,
+                        onExpandedChange = { viewModel.toggleLandlordDropdown() }
                     ) {
                         OutlinedTextField(
-                            value = landlords.find { it.landlordId == selectedLandlordId }?.let {
+                            value = uiState.landlords.find { it.landlordId == uiState.formState.selectedLandlordId }?.let {
                                 "${it.firstName} ${it.lastName} - ${it.email}"
                             } ?: "",
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Select Landlord *") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showLandlordDropdown) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = uiState.showLandlordDropdown) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .menuAnchor()
                         )
 
                         ExposedDropdownMenu(
-                            expanded = showLandlordDropdown,
-                            onDismissRequest = { showLandlordDropdown = false }
+                            expanded = uiState.showLandlordDropdown,
+                            onDismissRequest = { viewModel.toggleLandlordDropdown() }
                         ) {
-                            landlords.forEach { landlord ->
+                            uiState.landlords.forEach { landlord ->
                                 DropdownMenuItem(
                                     text = {
                                         Column {
@@ -143,8 +113,7 @@ fun AddPropertyScreen(
                                         }
                                     },
                                     onClick = {
-                                        selectedLandlordId = landlord.landlordId
-                                        showLandlordDropdown = false
+                                        viewModel.selectLandlord(landlord.landlordId)
                                     }
                                 )
                             }
@@ -163,8 +132,8 @@ fun AddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
+                        value = uiState.formState.title,
+                        onValueChange = { viewModel.updateTitle(it) },
                         label = { Text("Property Title *") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -172,8 +141,8 @@ fun AddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
+                        value = uiState.formState.description,
+                        onValueChange = { viewModel.updateDescription(it) },
                         label = { Text("Description") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3
@@ -189,8 +158,8 @@ fun AddPropertyScreen(
                     ) {
                         listOf("apartment", "house", "room", "studio", "shared").forEach { type ->
                             FilterChip(
-                                selected = propertyType == type,
-                                onClick = { propertyType = type },
+                                selected = uiState.formState.propertyType == type,
+                                onClick = { viewModel.updatePropertyType(type) },
                                 label = { Text(type.capitalize()) }
                             )
                         }
@@ -208,8 +177,8 @@ fun AddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = address,
-                        onValueChange = { address = it },
+                        value = uiState.formState.address,
+                        onValueChange = { viewModel.updateAddress(it) },
                         label = { Text("Address *") },
                         leadingIcon = { Icon(Icons.Filled.LocationOn, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth()
@@ -222,14 +191,14 @@ fun AddPropertyScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedTextField(
-                            value = city,
-                            onValueChange = { city = it },
+                            value = uiState.formState.city,
+                            onValueChange = { viewModel.updateCity(it) },
                             label = { Text("City *") },
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
-                            value = postalCode,
-                            onValueChange = { postalCode = it },
+                            value = uiState.formState.postalCode,
+                            onValueChange = { viewModel.updatePostalCode(it) },
                             label = { Text("Postal Code") },
                             modifier = Modifier.weight(1f)
                         )
@@ -247,8 +216,8 @@ fun AddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = pricePerMonth,
-                        onValueChange = { pricePerMonth = it },
+                        value = uiState.formState.pricePerMonth,
+                        onValueChange = { viewModel.updatePricePerMonth(it) },
                         label = { Text("Price per Month (€) *") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
@@ -261,22 +230,22 @@ fun AddPropertyScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedTextField(
-                            value = bedrooms,
-                            onValueChange = { bedrooms = it },
+                            value = uiState.formState.bedrooms,
+                            onValueChange = { viewModel.updateBedrooms(it) },
                             label = { Text("Bedrooms *") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
-                            value = bathrooms,
-                            onValueChange = { bathrooms = it },
+                            value = uiState.formState.bathrooms,
+                            onValueChange = { viewModel.updateBathrooms(it) },
                             label = { Text("Bathrooms *") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
-                            value = totalCapacity,
-                            onValueChange = { totalCapacity = it },
+                            value = uiState.formState.totalCapacity,
+                            onValueChange = { viewModel.updateTotalCapacity(it) },
                             label = { Text("Capacity *") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
@@ -286,12 +255,12 @@ fun AddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = availableFrom,
+                        value = uiState.formState.availableFrom,
                         onValueChange = { }, // Make it read-only
                         label = { Text("Available From") },
                         leadingIcon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
                         trailingIcon = {
-                            IconButton(onClick = { showDatePicker = true }) {
+                            IconButton(onClick = { viewModel.toggleDatePicker() }) {
                                 Icon(Icons.Filled.DateRange, contentDescription = "Select date")
                             }
                         },
@@ -309,20 +278,16 @@ fun AddPropertyScreen(
                     )
                 }
 
-                items(amenities.chunked(2)) { amenityPair ->
+                items(uiState.amenities.chunked(2)) { amenityPair ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         amenityPair.forEach { amenity ->
                             FilterChip(
-                                selected = selectedAmenities.contains(amenity.amenityId),
+                                selected = uiState.formState.selectedAmenities.contains(amenity.amenityId),
                                 onClick = {
-                                    selectedAmenities = if (selectedAmenities.contains(amenity.amenityId)) {
-                                        selectedAmenities - amenity.amenityId
-                                    } else {
-                                        selectedAmenities + amenity.amenityId
-                                    }
+                                    viewModel.toggleAmenity(amenity.amenityId)
                                 },
                                 label = { Text(amenity.name) },
                                 modifier = Modifier.weight(1f)
@@ -339,58 +304,16 @@ fun AddPropertyScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
-                            scope.launch {
-                                isSubmitting = true
-
-                                try {
-                                    // Log the data being sent
-                                    Log.d("AddPropertyScreen", "Creating property with:")
-                                    Log.d("AddPropertyScreen", "Landlord ID: $selectedLandlordId")
-                                    Log.d("AddPropertyScreen", "Title: $title")
-                                    Log.d("AddPropertyScreen", "Price: $pricePerMonth")
-                                    Log.d("AddPropertyScreen", "Available from: $availableFrom")
-
-                                    val propertyId = adminRepository.createProperty(
-                                        landlordId = selectedLandlordId!!,
-                                        title = title.trim(),
-                                        description = description.trim(),
-                                        propertyType = propertyType,
-                                        address = address.trim(),
-                                        city = city.trim(),
-                                        postalCode = postalCode.trim(),
-                                        pricePerMonth = pricePerMonth.toDouble(),
-                                        bedrooms = bedrooms.toInt(),
-                                        bathrooms = bathrooms.toInt(),
-                                        totalCapacity = totalCapacity.toInt(),
-                                        availableFrom = availableFrom
-                                    )
-
-                                    Log.d("AddPropertyScreen", "Property created with ID: $propertyId")
-
-                                    if (propertyId > 0) {
-                                        // Add amenities
-                                        if (selectedAmenities.isNotEmpty()) {
-                                            val amenitiesAdded = adminRepository.addPropertyAmenities(propertyId, selectedAmenities.toList())
-                                            Log.d("AddPropertyScreen", "Amenities added: $amenitiesAdded")
-                                        }
-                                        snackbarHostState.showSnackbar("Property created successfully!")
-                                        onPropertyAdded()
-                                    } else {
-                                        snackbarHostState.showSnackbar("Failed to create property - check logs for details")
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("AddPropertyScreen", "Error creating property", e)
-                                    snackbarHostState.showSnackbar("Error: ${e.message}")
-                                }
-
-                                isSubmitting = false
-                            }
+                            viewModel.createProperty(onSuccess = onPropertyAdded)
                         },
-                        enabled = isFormValid && !isSubmitting,
+                        enabled = viewModel.isFormValid && !uiState.isSubmitting,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        if (isSubmitting) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                        if (uiState.isSubmitting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
                         } else {
                             Text("Create Property")
                         }
@@ -401,13 +324,13 @@ fun AddPropertyScreen(
     }
 
     // Date Picker Dialog
-    if (showDatePicker) {
+    if (uiState.showDatePicker) {
         DatePickerDialog(
             onDateSelected = { year, month, day ->
-                availableFrom = String.format("%04d-%02d-%02d", year, month, day)
-                showDatePicker = false
+                viewModel.updateAvailableFrom(String.format("%04d-%02d-%02d", year, month, day))
+                viewModel.toggleDatePicker()
             },
-            onDismiss = { showDatePicker = false }
+            onDismiss = { viewModel.toggleDatePicker() }
         )
     }
 }
