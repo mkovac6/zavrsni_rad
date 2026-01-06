@@ -32,6 +32,7 @@ fun LandlordHomeScreen(
     onEditProperty: (Int) -> Unit,
     onBookingsClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onReviewsClick: () -> Unit,
     onLogout: () -> Unit
 ) {
     val propertyRepository = remember { PropertyRepository() }
@@ -155,6 +156,30 @@ fun LandlordHomeScreen(
                         onBookingsClick()
                     }
                 )
+                NavigationBarItem(
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (newReviewsCount > 0) {
+                                    Badge {
+                                        Text(
+                                            text = newReviewsCount.toString(),
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.Star, contentDescription = "Reviews")
+                        }
+                    },
+                    label = { Text("Reviews") },
+                    selected = selectedTab == 2,
+                    onClick = {
+                        selectedTab = 2
+                        onReviewsClick()
+                    }
+                )
             }
         },
         floatingActionButton = {
@@ -264,8 +289,11 @@ fun LandlordHomeScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
-               if (newReviewsCount > 0) {
+                    }
+                }
+                if (newReviewsCount > 0) {
                     Card(
+                        onClick = onReviewsClick,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
@@ -276,8 +304,6 @@ fun LandlordHomeScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-                    }
-                }
                     }
                 }
             }

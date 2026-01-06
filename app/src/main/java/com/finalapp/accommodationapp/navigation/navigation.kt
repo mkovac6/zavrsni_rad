@@ -24,6 +24,7 @@ import com.finalapp.accommodationapp.screens.landlord.LandlordEditPropertyScreen
 import com.finalapp.accommodationapp.screens.landlord.LandlordHomeScreen
 import com.finalapp.accommodationapp.screens.landlord.LandlordProfileCompletionScreen
 import com.finalapp.accommodationapp.screens.landlord.LandlordProfileScreen
+import com.finalapp.accommodationapp.screens.landlord.LandlordReviewsScreen
 import com.finalapp.accommodationapp.screens.student.HomeScreen
 import com.finalapp.accommodationapp.screens.student.LoginScreen
 import com.finalapp.accommodationapp.screens.student.MapScreen
@@ -458,6 +459,9 @@ fun AppNavigation(
                 onProfileClick = {
                     navController.navigate(Screen.LandlordProfile.route)
                 },
+                onReviewsClick = {
+                    navController.navigate(Screen.LandlordReviews.route)
+                },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true }
@@ -483,6 +487,14 @@ fun AppNavigation(
                     navController.popBackStack()
                 },
                 onProfileUpdated = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.LandlordReviews.route) {
+            LandlordReviewsScreen(
+                onNavigateBack = {
                     navController.popBackStack()
                 }
             )
@@ -513,6 +525,7 @@ sealed class Screen(val route: String) {
     object LandlordProfile : Screen("landlord_profile")
     object LandlordBookings : Screen("landlord_bookings")
     object LandlordAddProperty : Screen("landlord_add_property")
+    object LandlordReviews : Screen("landlord_reviews")
     object PropertyDetail : Screen("property_detail")
     object LandlordEditProfile : Screen("landlord_edit_profile")
 
