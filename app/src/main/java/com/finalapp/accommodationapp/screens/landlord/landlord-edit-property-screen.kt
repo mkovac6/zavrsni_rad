@@ -1,7 +1,10 @@
 package com.finalapp.accommodationapp.screens.landlord
 
+import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -11,13 +14,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.finalapp.accommodationapp.data.model.admin.Amenity
 import com.finalapp.accommodationapp.data.model.Property
+import com.finalapp.accommodationapp.data.model.PropertyImage
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
+import com.finalapp.accommodationapp.data.repository.PropertyImageRepository
+import com.finalapp.accommodationapp.screens.components.MultiImagePicker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormatSymbols
@@ -35,6 +43,8 @@ fun LandlordEditPropertyScreen(
     val coroutineScope = rememberCoroutineScope()
     val propertyRepository = remember { PropertyRepository() }
     val adminRepository = remember { AdminRepository() }
+    val context = LocalContext.current
+    val imageRepository = remember { PropertyImageRepository(context) }
 
     // States
     var isLoading by remember { mutableStateOf(true) }
@@ -54,6 +64,11 @@ fun LandlordEditPropertyScreen(
 
     var amenities by remember { mutableStateOf(listOf<Amenity>()) }
     var selectedAmenities by remember { mutableStateOf(setOf<Int>()) }
+
+    // Image states
+    var existingImages by remember { mutableStateOf(listOf<PropertyImage>()) }
+    var newImageUris by remember { mutableStateOf(listOf<Uri>()) }
+    var isUploadingImages by remember { mutableStateOf(false) }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var isUpdating by remember { mutableStateOf(false) }
@@ -109,6 +124,14 @@ fun LandlordEditPropertyScreen(
                 Log.d("LandlordEditProperty", "Loaded ${selectedAmenities.size} selected amenities")
             } catch (e: Exception) {
                 Log.e("LandlordEditProperty", "Error loading property amenities", e)
+            }
+
+            // Load existing images
+            try {
+                existingImages = imageRepository.getPropertyImages(propertyId)
+                Log.d("LandlordEditProperty", "Loaded ${existingImages.size} images")
+            } catch (e: Exception) {
+                Log.e("LandlordEditProperty", "Error loading images", e)
             }
 
             isLoading = false
@@ -197,6 +220,142 @@ fun LandlordEditPropertyScreen(
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
+                }
+
+                // Existing Images Section
+                Text(
+                    "Current Images (${existingImages.size})",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                if (existingImages.isNotEmpty()) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(existingImages) { image ->
+                            Card(
+                                modifier = Modifier.size(120.dp)
+                            ) {
+                                Box {
+                                    AsyncImage(
+                                        model = image.imageUrl + "?width=400&quality=75",
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    // Delete button
+                                    IconButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                val success = imageRepository.deletePropertyImage(
+                                                    image.imageId,
+                                                    image.imageUrl
+                                                )
+                                                if (success) {
+                                                    existingImages = existingImages.filter { it.imageId != image.imageId }
+                                                    successMessage = "Image deleted"
+                                                } else {
+                                                    errorMessage = "Failed to delete image"
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            "Delete",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                    // Primary badge
+                                    if (image.isPrimary) {
+                                        Card(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomStart)
+                                                .padding(4.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        ) {
+                                            Text(
+                                                "Primary",
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onPrimary
+                                            )
+                                        }
+                                    } else {
+                                        // Set as primary button
+                                        TextButton(
+                                            onClick = {
+                                                coroutineScope.launch {
+                                                    val success = imageRepository.setPrimaryImage(
+                                                        propertyId,
+                                                        image.imageId
+                                                    )
+                                                    if (success) {
+                                                        existingImages = existingImages.map {
+                                                            it.copy(isPrimary = it.imageId == image.imageId)
+                                                        }
+                                                        successMessage = "Primary image updated"
+                                                    } else {
+                                                        errorMessage = "Failed to set primary"
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .padding(4.dp)
+                                        ) {
+                                            Text(
+                                                "Set Primary",
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        "No images yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Add new images section
+                Text(
+                    "Add New Images",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
+                val totalImages = existingImages.size + newImageUris.size
+                val canAddMore = totalImages < 10
+
+                MultiImagePicker(
+                    selectedImages = newImageUris,
+                    onImagesSelected = { uris ->
+                        val availableSlots = 10 - existingImages.size
+                        newImageUris = uris.take(availableSlots)
+                        if (uris.size > availableSlots) {
+                            errorMessage = "Maximum 10 images per property (${existingImages.size} existing)"
+                        }
+                    },
+                    maxImages = 10 - existingImages.size,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (!canAddMore) {
+                    Text(
+                        "Maximum 10 images reached",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
 
                 // Property Type
@@ -429,6 +588,22 @@ fun LandlordEditPropertyScreen(
                                             selectedAmenities.toList()
                                         )
 
+                                        // Upload new images if any
+                                        if (newImageUris.isNotEmpty()) {
+                                            isUploadingImages = true
+                                            val startOrder = existingImages.maxOfOrNull { it.displayOrder }?.plus(1) ?: 0
+                                            val uploadedUrls = imageRepository.uploadMultipleImages(
+                                                propertyId,
+                                                newImageUris,
+                                                startOrder
+                                            )
+                                            isUploadingImages = false
+
+                                            if (uploadedUrls.isNotEmpty()) {
+                                                Log.d("LandlordEditProperty", "Uploaded ${uploadedUrls.size} new images")
+                                            }
+                                        }
+
                                         successMessage = "Property updated successfully!"
                                         delay(1000)
                                         onPropertyUpdated()
@@ -442,15 +617,26 @@ fun LandlordEditPropertyScreen(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isUpdating
+                    enabled = !isUpdating && !isUploadingImages
                 ) {
-                    if (isUpdating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    } else {
-                        Text("Update Property")
+                    when {
+                        isUploadingImages -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Uploading images...")
+                        }
+                        isUpdating -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Updating...")
+                        }
+                        else -> Text("Update Property")
                     }
                 }
             }
