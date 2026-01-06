@@ -6,6 +6,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.finalapp.accommodationapp.ui.viewmodels.admin.AdminLandlordListViewModel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,22 +23,26 @@ import com.finalapp.accommodationapp.data.model.admin.LandlordWithUser
 @Composable
 fun AdminLandlordListScreen(
     onNavigateBack: () -> Unit,
-    onAddLandlord: () -> Unit
+    onAddLandlord: () -> Unit,
+    viewModel: AdminLandlordListViewModel = viewModel {
+        AdminLandlordListViewModel(
+            adminRepository = AdminRepository()
+        )
+    }
 ) {
-    val adminRepository = remember { AdminRepository() }
-    var landlords by remember { mutableStateOf<List<LandlordWithUser>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var landlordToDelete by remember { mutableStateOf<LandlordWithUser?>(null) }
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load landlords
+    // Load uiState.landlords
     LaunchedEffect(Unit) {
-        scope.launch {
-            isLoading = true
-            landlords = adminRepository.getAllLandlords()
-            isLoading = false
+        viewModel.loadLandlords()
+    }
+
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
         }
     }
 
@@ -57,7 +64,7 @@ fun AdminLandlordListScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -66,7 +73,7 @@ fun AdminLandlordListScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (landlords.isEmpty()) {
+        } else if (uiState.landlords.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -117,7 +124,7 @@ fun AdminLandlordListScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "Total Landlords: ${landlords.size}",
+                                "Total Landlords: ${uiState.landlords.size}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -125,12 +132,12 @@ fun AdminLandlordListScreen(
                     }
                 }
 
-                items(landlords) { landlord ->
+                items(uiState.landlords) { landlord ->
                     LandlordCard(
                         landlord = landlord,
                         onDelete = {
-                            landlordToDelete = landlord
-                            showDeleteDialog = true
+                            viewModel.showDeleteDialog(landlord)
+                            
                         }
                     )
                 }
@@ -139,33 +146,20 @@ fun AdminLandlordListScreen(
     }
 
     // Delete confirmation dialog
-    if (showDeleteDialog) {
+    if (uiState.showDeleteDialog) {
         AlertDialog(
             onDismissRequest = {
-                showDeleteDialog = false
-                landlordToDelete = null
+                viewModel.hideDeleteDialog()
+                
             },
             title = { Text("Delete Landlord") },
             text = {
-                Text("Are you sure you want to delete ${landlordToDelete?.firstName} ${landlordToDelete?.lastName}? This will also delete all their properties and user account.")
+                Text("Are you sure you want to delete ${uiState.landlordToDelete?.firstName} ${uiState.landlordToDelete?.lastName}? This will also delete all their properties and user account.")
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        landlordToDelete?.let { landlord ->
-                            scope.launch {
-                                showDeleteDialog = false
-                                landlordToDelete = null
-
-                                val success = adminRepository.deleteLandlord(landlord.userId)
-                                if (success) {
-                                    landlords = adminRepository.getAllLandlords()
-                                    snackbarHostState.showSnackbar("Landlord deleted successfully")
-                                } else {
-                                    snackbarHostState.showSnackbar("Failed to delete landlord")
-                                }
-                            }
-                        }
+                        viewModel.deleteLandlord()
                     }
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -174,8 +168,8 @@ fun AdminLandlordListScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        showDeleteDialog = false
-                        landlordToDelete = null
+                        viewModel.hideDeleteDialog()
+                        
                     }
                 ) {
                     Text("Cancel")

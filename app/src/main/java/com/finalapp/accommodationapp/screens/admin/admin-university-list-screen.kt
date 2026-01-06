@@ -11,42 +11,38 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.repository.UniversityRepository
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.model.University
+import com.finalapp.accommodationapp.ui.viewmodels.admin.AdminUniversityListViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminUniversityListScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: AdminUniversityListViewModel = viewModel {
+        AdminUniversityListViewModel(
+            universityRepository = UniversityRepository(),
+            adminRepository = AdminRepository()
+        )
+    }
 ) {
-    val universityRepository = remember { UniversityRepository() }
-    val adminRepository = remember { AdminRepository() }
-    var universities by remember { mutableStateOf<List<University>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var universityToDelete by remember { mutableStateOf<University?>(null) }
-    var showAddDialog by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Form states for adding new university
-    var newUniversityName by remember { mutableStateOf("") }
-    var newUniversityCity by remember { mutableStateOf("") }
-    var newUniversityCountry by remember { mutableStateOf("") }
-
     // Load universities
-    fun loadUniversities() {
-        scope.launch {
-            isLoading = true
-            universities = universityRepository.getAllUniversities()
-            isLoading = false
-        }
+    LaunchedEffect(Unit) {
+        viewModel.loadUniversities()
     }
 
-    LaunchedEffect(Unit) {
-        loadUniversities()
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
     }
 
     Scaffold(
@@ -60,14 +56,14 @@ fun AdminUniversityListScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showAddDialog = true }) {
+                    IconButton(onClick = { viewModel.showAddDialog() }) {
                         Icon(Icons.Filled.Add, contentDescription = "Add University")
                     }
                 }
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -104,7 +100,7 @@ fun AdminUniversityListScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "Total Universities: ${universities.size}",
+                                "Total Universities: ${uiState.universities.size}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -112,12 +108,11 @@ fun AdminUniversityListScreen(
                     }
                 }
 
-                items(universities) { university ->
+                items(uiState.universities) { university ->
                     UniversityCard(
                         university = university,
                         onDelete = {
-                            universityToDelete = university
-                            showDeleteDialog = true
+                            viewModel.showDeleteDialog(university)
                         }
                     )
                 }
@@ -126,33 +121,19 @@ fun AdminUniversityListScreen(
     }
 
     // Delete confirmation dialog
-    if (showDeleteDialog) {
+    if (uiState.showDeleteDialog) {
         AlertDialog(
             onDismissRequest = {
-                showDeleteDialog = false
-                universityToDelete = null
+                viewModel.hideDeleteDialog()
             },
             title = { Text("Delete University") },
             text = {
-                Text("Are you sure you want to delete \"${universityToDelete?.name}\"? This can only be done if no students are enrolled.")
+                Text("Are you sure you want to delete \"${uiState.universityToDelete?.name}\"? This can only be done if no students are enrolled.")
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        universityToDelete?.let { university ->
-                            scope.launch {
-                                showDeleteDialog = false
-                                universityToDelete = null
-
-                                val success = adminRepository.deleteUniversity(university.universityId)
-                                if (success) {
-                                    loadUniversities()
-                                    snackbarHostState.showSnackbar("University deleted successfully")
-                                } else {
-                                    snackbarHostState.showSnackbar("Cannot delete university with enrolled students")
-                                }
-                            }
-                        }
+                        viewModel.deleteUniversity()
                     }
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -161,8 +142,7 @@ fun AdminUniversityListScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        showDeleteDialog = false
-                        universityToDelete = null
+                        viewModel.hideDeleteDialog()
                     }
                 ) {
                     Text("Cancel")
@@ -172,13 +152,10 @@ fun AdminUniversityListScreen(
     }
 
     // Add university dialog
-    if (showAddDialog) {
+    if (uiState.showAddDialog) {
         AlertDialog(
             onDismissRequest = {
-                showAddDialog = false
-                newUniversityName = ""
-                newUniversityCity = ""
-                newUniversityCountry = ""
+                viewModel.hideAddDialog()
             },
             title = { Text("Add New University") },
             text = {
@@ -186,20 +163,20 @@ fun AdminUniversityListScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = newUniversityName,
-                        onValueChange = { newUniversityName = it },
+                        value = uiState.formState.newUniversityName,
+                        onValueChange = { viewModel.updateUniversityName(it) },
                         label = { Text("University Name") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
-                        value = newUniversityCity,
-                        onValueChange = { newUniversityCity = it },
+                        value = uiState.formState.newUniversityCity,
+                        onValueChange = { viewModel.updateUniversityCity(it) },
                         label = { Text("City") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
-                        value = newUniversityCountry,
-                        onValueChange = { newUniversityCountry = it },
+                        value = uiState.formState.newUniversityCountry,
+                        onValueChange = { viewModel.updateUniversityCountry(it) },
                         label = { Text("Country") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -208,31 +185,9 @@ fun AdminUniversityListScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (newUniversityName.isNotBlank() &&
-                            newUniversityCity.isNotBlank() &&
-                            newUniversityCountry.isNotBlank()) {
-                            scope.launch {
-                                val success = adminRepository.addUniversity(
-                                    newUniversityName.trim(),
-                                    newUniversityCity.trim(),
-                                    newUniversityCountry.trim()
-                                )
-                                if (success) {
-                                    loadUniversities()
-                                    snackbarHostState.showSnackbar("University added successfully")
-                                    showAddDialog = false
-                                    newUniversityName = ""
-                                    newUniversityCity = ""
-                                    newUniversityCountry = ""
-                                } else {
-                                    snackbarHostState.showSnackbar("Failed to add university")
-                                }
-                            }
-                        }
+                        viewModel.addUniversity()
                     },
-                    enabled = newUniversityName.isNotBlank() &&
-                            newUniversityCity.isNotBlank() &&
-                            newUniversityCountry.isNotBlank()
+                    enabled = viewModel.isAddFormValid
                 ) {
                     Text("Add")
                 }
@@ -240,10 +195,7 @@ fun AdminUniversityListScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        showAddDialog = false
-                        newUniversityName = ""
-                        newUniversityCity = ""
-                        newUniversityCountry = ""
+                        viewModel.hideAddDialog()
                     }
                 ) {
                     Text("Cancel")

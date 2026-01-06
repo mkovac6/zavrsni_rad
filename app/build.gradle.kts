@@ -4,9 +4,16 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.hilt)
-    id("kotlin-kapt")
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.0"
+    // Hilt plugin temporarily disabled due to JavaPoet compatibility issue - will re-enable later
+    // alias(libs.plugins.hilt)
+    // id("com.google.devtools.ksp") version "2.0.21-1.0.27"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
+}
+
+configurations.all {
+    resolutionStrategy {
+        force("com.squareup:javapoet:1.13.0")
+    }
 }
 
 android {
@@ -83,9 +90,14 @@ dependencies {
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
-    implementation(libs.hilt.navigation.compose)
+    // Hilt dependencies kept for future re-enablement
+    // implementation(libs.hilt.android)
+    // ksp(libs.hilt.compiler)
+    // implementation(libs.hilt.navigation.compose)
+
+    // ViewModel support
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
     implementation(libs.coil.compose)
     implementation(libs.maps.compose)
     implementation(libs.play.services.maps)

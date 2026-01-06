@@ -17,7 +17,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
@@ -25,6 +26,7 @@ import com.finalapp.accommodationapp.data.repository.PropertyImageRepository
 import com.finalapp.accommodationapp.data.model.admin.Amenity
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.screens.components.MultiImagePicker
+import com.finalapp.accommodationapp.ui.viewmodels.landlord.LandlordAddPropertyViewModel
 import java.text.DateFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.*
@@ -33,97 +35,40 @@ import java.util.*
 @Composable
 fun LandlordAddPropertyScreen(
     onNavigateBack: () -> Unit,
-    onPropertyAdded: () -> Unit
+    onPropertyAdded: () -> Unit,
+    viewModel: LandlordAddPropertyViewModel = viewModel {
+        LandlordAddPropertyViewModel(
+            adminRepository = AdminRepository(),
+            landlordRepository = LandlordRepository()
+        )
+    }
 ) {
-    val adminRepository = remember { AdminRepository() }
-    val landlordRepository = remember { LandlordRepository() }
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-
-    // Get current landlord
-    var landlordId by remember { mutableStateOf<Int?>(null) }
-    var landlordName by remember { mutableStateOf("") }
-
-    // Load data
-    var amenities by remember { mutableStateOf<List<Amenity>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    // Form states
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var propertyType by remember { mutableStateOf("apartment") }
-    var address by remember { mutableStateOf("") }
-    var city by remember { mutableStateOf("") }
-    var postalCode by remember { mutableStateOf("") }
-    var pricePerMonth by remember { mutableStateOf("") }
-    var bedrooms by remember { mutableStateOf("1") }
-    var bathrooms by remember { mutableStateOf("1") }
-    var totalCapacity by remember { mutableStateOf("1") }
-    var availableFrom by remember { mutableStateOf("") }
-    var selectedAmenities by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
-
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showPastDateWarning by remember { mutableStateOf(false) }
-    var isSubmitting by remember { mutableStateOf(false) }
-    var isUploadingImages by remember { mutableStateOf(false) }
-
     val context = LocalContext.current
 
-    // Load landlord info and amenities
+    // Load landlord info and uiState.amenities
     LaunchedEffect(Unit) {
-        scope.launch {
-            isLoading = true
-
-            // Debug: Check UserSession
-            val currentUser = UserSession.currentUser
-            Log.d("LandlordAddProperty", "Current user from session: ${currentUser?.email}")
-            Log.d("LandlordAddProperty", "Current userId: ${currentUser?.userId}")
-            Log.d("LandlordAddProperty", "User type: ${currentUser?.userType}")
-
-            val userId = currentUser?.userId
-            if (userId != null) {
-                Log.d("LandlordAddProperty", "Attempting to fetch landlord for userId: $userId")
-
-                val landlord = landlordRepository.getLandlordByUserId(userId)
-
-                if (landlord != null) {
-                    landlordId = landlord.landlordId
-                    landlordName = "${landlord.firstName} ${landlord.lastName}"
-                    Log.d("LandlordAddProperty", "Successfully loaded landlord: $landlordName (ID: $landlordId)")
-                } else {
-                    Log.e("LandlordAddProperty", "getLandlordByUserId returned null for userId: $userId")
-
-                    // Let's check what the actual issue is
-                    // This shouldn't happen since we know the profile exists
-                    Log.e("LandlordAddProperty", "This user should have a landlord profile in the database!")
-                }
-            } else {
-                Log.e("LandlordAddProperty", "UserSession.currentUser?.userId is null!")
-                Log.e("LandlordAddProperty", "Full UserSession.currentUser: ${UserSession.currentUser}")
-            }
-
-            // Load amenities
-            try {
-                amenities = adminRepository.getAllAmenities()
-                Log.d("LandlordAddProperty", "Loaded ${amenities.size} amenities")
-            } catch (e: Exception) {
-                Log.e("LandlordAddProperty", "Failed to load amenities: ${e.message}")
-            }
-
-            isLoading = false
+        val userId = UserSession.currentUser?.userId
+        if (userId != null) {
+            viewModel.loadLandlordData(userId)
         }
     }
 
-    // Validation
-    val isFormValid = landlordId != null &&
-            title.isNotBlank() &&
-            address.isNotBlank() &&
-            city.isNotBlank() &&
-            pricePerMonth.toDoubleOrNull() != null &&
-            bedrooms.toIntOrNull() != null &&
-            bathrooms.toIntOrNull() != null &&
-            totalCapacity.toIntOrNull() != null
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
+
+    // Handle navigation after successful property creation
+    LaunchedEffect(uiState.propertyCreated) {
+        if (uiState.propertyCreated) {
+            onPropertyAdded()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -138,7 +83,7 @@ fun LandlordAddPropertyScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -147,7 +92,7 @@ fun LandlordAddPropertyScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (landlordId == null) {
+        } else if (uiState.landlordId == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -185,7 +130,7 @@ fun LandlordAddPropertyScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Adding as: $landlordName",
+                                text = "Adding as: $uiState.landlordName",
                                 style = MaterialTheme.typography.bodyLarge
                             )
                         }
@@ -202,8 +147,8 @@ fun LandlordAddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
+                        value = uiState.formState.title,
+                        onValueChange = { viewModel.updateTitle(it) },
                         label = { Text("Property Title *") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -211,8 +156,8 @@ fun LandlordAddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
+                        value = uiState.formState.description,
+                        onValueChange = { viewModel.updateDescription(it) },
                         label = { Text("Description") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3
@@ -228,8 +173,8 @@ fun LandlordAddPropertyScreen(
                     ) {
                         listOf("apartment", "house", "room", "studio", "shared").forEach { type ->
                             FilterChip(
-                                selected = propertyType == type,
-                                onClick = { propertyType = type },
+                                selected = uiState.formState.propertyType == type,
+                                onClick = { viewModel.updatePropertyType(type) },
                                 label = { Text(type.capitalize()) }
                             )
                         }
@@ -247,8 +192,8 @@ fun LandlordAddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = address,
-                        onValueChange = { address = it },
+                        value = uiState.formState.address,
+                        onValueChange = { viewModel.updateAddress(it) },
                         label = { Text("Address *") },
                         leadingIcon = { Icon(Icons.Filled.LocationOn, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth()
@@ -261,14 +206,14 @@ fun LandlordAddPropertyScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedTextField(
-                            value = city,
-                            onValueChange = { city = it },
+                            value = uiState.formState.city,
+                            onValueChange = { viewModel.updateCity(it) },
                             label = { Text("City *") },
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
-                            value = postalCode,
-                            onValueChange = { postalCode = it },
+                            value = uiState.formState.postalCode,
+                            onValueChange = { viewModel.updatePostalCode(it) },
                             label = { Text("Postal Code") },
                             modifier = Modifier.weight(1f)
                         )
@@ -286,8 +231,8 @@ fun LandlordAddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = pricePerMonth,
-                        onValueChange = { pricePerMonth = it },
+                        value = uiState.formState.pricePerMonth,
+                        onValueChange = { viewModel.updatePricePerMonth(it) },
                         label = { Text("Price per Month (€) *") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
@@ -300,22 +245,22 @@ fun LandlordAddPropertyScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedTextField(
-                            value = bedrooms,
-                            onValueChange = { bedrooms = it },
+                            value = uiState.formState.bedrooms,
+                            onValueChange = { viewModel.updateBedrooms(it) },
                             label = { Text("Bedrooms *") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
-                            value = bathrooms,
-                            onValueChange = { bathrooms = it },
+                            value = uiState.formState.bathrooms,
+                            onValueChange = { viewModel.updateBathrooms(it) },
                             label = { Text("Bathrooms *") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
-                            value = totalCapacity,
-                            onValueChange = { totalCapacity = it },
+                            value = uiState.formState.totalCapacity,
+                            onValueChange = { viewModel.updateTotalCapacity(it) },
                             label = { Text("Capacity *") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
@@ -325,12 +270,12 @@ fun LandlordAddPropertyScreen(
 
                 item {
                     OutlinedTextField(
-                        value = availableFrom,
+                        value = uiState.formState.availableFrom,
                         onValueChange = { },
                         label = { Text("Available From") },
                         leadingIcon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
                         trailingIcon = {
-                            IconButton(onClick = { showDatePicker = true }) {
+                            IconButton(onClick = { viewModel.showDatePicker() }) {
                                 Icon(Icons.Filled.DateRange, contentDescription = "Select date")
                             }
                         },
@@ -348,20 +293,21 @@ fun LandlordAddPropertyScreen(
                     )
                 }
 
-                items(amenities.chunked(2)) { amenityPair ->
+                items(uiState.amenities.chunked(2)) { amenityPair ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         amenityPair.forEach { amenity ->
                             FilterChip(
-                                selected = selectedAmenities.contains(amenity.amenityId),
+                                selected = uiState.formState.selectedAmenities.contains(amenity.amenityId),
                                 onClick = {
-                                    selectedAmenities = if (selectedAmenities.contains(amenity.amenityId)) {
-                                        selectedAmenities - amenity.amenityId
+                                    val newAmenities = if (uiState.formState.selectedAmenities.contains(amenity.amenityId)) {
+                                        uiState.formState.selectedAmenities - amenity.amenityId
                                     } else {
-                                        selectedAmenities + amenity.amenityId
+                                        uiState.formState.selectedAmenities + amenity.amenityId
                                     }
+                                    viewModel.updateSelectedAmenities(newAmenities)
                                 },
                                 label = { Text(amenity.name) },
                                 modifier = Modifier.weight(1f)
@@ -389,8 +335,8 @@ fun LandlordAddPropertyScreen(
 
                 item {
                     MultiImagePicker(
-                        selectedImages = selectedImageUris,
-                        onImagesSelected = { selectedImageUris = it },
+                        selectedImages = uiState.formState.selectedImageUris,
+                        onImagesSelected = { viewModel.updateSelectedImageUris(it) },
                         maxImages = 10,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -401,91 +347,18 @@ fun LandlordAddPropertyScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
-                            // Check if available date is in the past
-                            val today = Calendar.getInstance()
-                            val todayDate = Date(today.timeInMillis)
-
-                            val selectedDate = if (availableFrom.isNotEmpty()) {
-                                try {
-                                    val parts = availableFrom.split("-")
-                                    if (parts.size == 3) {
-                                        val cal = Calendar.getInstance()
-                                        cal.set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt(), 0, 0, 0)
-                                        cal.set(Calendar.MILLISECOND, 0)
-                                        cal.time
-                                    } else null
-                                } catch (e: Exception) {
-                                    null
-                                }
-                            } else null
-
-                            if (selectedDate != null && selectedDate.before(todayDate)) {
-                                // Show warning dialog for past date
-                                showPastDateWarning = true
-                            } else {
-                                // Create property normally (will be active)
-                                scope.launch {
-                                    isSubmitting = true
-
-                                    try {
-                                        Log.d("LandlordAddProperty", "Creating property for landlord: $landlordId")
-
-                                        val propertyId = adminRepository.createProperty(
-                                            landlordId = landlordId!!,
-                                            title = title.trim(),
-                                            description = description.trim(),
-                                            propertyType = propertyType,
-                                            address = address.trim(),
-                                            city = city.trim(),
-                                            postalCode = postalCode.trim(),
-                                            pricePerMonth = pricePerMonth.toDouble(),
-                                            bedrooms = bedrooms.toInt(),
-                                            bathrooms = bathrooms.toInt(),
-                                            totalCapacity = totalCapacity.toInt(),
-                                            availableFrom = availableFrom.ifEmpty {
-                                                val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                                                formatter.format(Date())
-                                            }
-                                        )
-
-                                        if (propertyId > 0) {
-                                            // Add amenities
-                                            if (selectedAmenities.isNotEmpty()) {
-                                                adminRepository.addPropertyAmenities(propertyId, selectedAmenities.toList())
-                                            }
-
-                                            // Upload images
-                                            if (selectedImageUris.isNotEmpty()) {
-                                                isUploadingImages = true
-                                                val imageRepository = PropertyImageRepository(context)
-                                                imageRepository.uploadMultipleImages(propertyId, selectedImageUris)
-                                                isUploadingImages = false
-                                            }
-
-                                            snackbarHostState.showSnackbar("Property created successfully!")
-                                            onPropertyAdded()
-                                        } else {
-                                            snackbarHostState.showSnackbar("Failed to create property")
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e("LandlordAddProperty", "Error creating property", e)
-                                        snackbarHostState.showSnackbar("Error: ${e.message}")
-                                    }
-
-                                    isSubmitting = false
-                                }
-                            }
+                            viewModel.submitProperty(context, onPropertyAdded)
                         },
-                        enabled = isFormValid && !isSubmitting && !isUploadingImages,
+                        enabled = viewModel.isFormValid && !uiState.isSubmitting && !uiState.isUploadingImages,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         when {
-                            isUploadingImages -> {
+                            uiState.isUploadingImages -> {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Uploading images...")
                             }
-                            isSubmitting -> {
+                            uiState.isSubmitting -> {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Creating property...")
@@ -499,24 +372,24 @@ fun LandlordAddPropertyScreen(
     }
 
     // Date Picker Dialog
-    if (showDatePicker) {
+    if (uiState.showDatePicker) {
         LandlordDatePickerDialog(
             onDateSelected = { year, month, day ->
-                availableFrom = String.format("%04d-%02d-%02d", year, month, day)
-                showDatePicker = false
+                viewModel.updateAvailableFrom(String.format("%04d-%02d-%02d", year, month, day))
+                viewModel.hideDatePicker()
             },
-            onDismiss = { showDatePicker = false }
+            onDismiss = { viewModel.hideDatePicker() }
         )
     }
 
     // Past Date Warning Dialog
-    if (showPastDateWarning) {
+    if (uiState.showPastDateWarning) {
         AlertDialog(
-            onDismissRequest = { showPastDateWarning = false },
+            onDismissRequest = { viewModel.dismissPastDateWarning() },
             title = { Text("Past Availability Date") },
             text = {
                 Text(
-                    "The availability date you selected ($availableFrom) is in the past. " +
+                    "The availability date you selected ($uiState.formState.availableFrom) is in the past. " +
                             "The property will be created as INACTIVE. You can activate it later when ready.\n\n" +
                             "Do you want to continue?"
                 )
@@ -524,59 +397,7 @@ fun LandlordAddPropertyScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        // Create property as inactive
-                        scope.launch {
-                            isSubmitting = true
-
-                            try {
-                                Log.d("LandlordAddProperty", "Creating inactive property for landlord: $landlordId")
-
-                                val propertyId = adminRepository.createProperty(
-                                    landlordId = landlordId!!,
-                                    title = title.trim(),
-                                    description = description.trim(),
-                                    propertyType = propertyType,
-                                    address = address.trim(),
-                                    city = city.trim(),
-                                    postalCode = postalCode.trim(),
-                                    pricePerMonth = pricePerMonth.toDouble(),
-                                    bedrooms = bedrooms.toInt(),
-                                    bathrooms = bathrooms.toInt(),
-                                    totalCapacity = totalCapacity.toInt(),
-                                    availableFrom = availableFrom
-                                )
-
-                                if (propertyId > 0) {
-                                    // Immediately set property as inactive
-                                    val propertyRepository = PropertyRepository()
-                                    propertyRepository.updatePropertyStatus(propertyId, false)
-
-                                    // Add amenities
-                                    if (selectedAmenities.isNotEmpty()) {
-                                        adminRepository.addPropertyAmenities(propertyId, selectedAmenities.toList())
-                                    }
-
-                                    // Upload images
-                                    if (selectedImageUris.isNotEmpty()) {
-                                        isUploadingImages = true
-                                        val imageRepository = PropertyImageRepository(context)
-                                        imageRepository.uploadMultipleImages(propertyId, selectedImageUris)
-                                        isUploadingImages = false
-                                    }
-
-                                    snackbarHostState.showSnackbar("Property created as INACTIVE due to past availability date")
-                                    onPropertyAdded()
-                                } else {
-                                    snackbarHostState.showSnackbar("Failed to create property")
-                                }
-                            } catch (e: Exception) {
-                                Log.e("LandlordAddProperty", "Error creating property", e)
-                                snackbarHostState.showSnackbar("Error: ${e.message}")
-                            }
-
-                            isSubmitting = false
-                            showPastDateWarning = false
-                        }
+                        viewModel.submitPropertyInactive(context, onPropertyAdded)
                     }
                 ) {
                     Text("Continue")
@@ -584,7 +405,7 @@ fun LandlordAddPropertyScreen(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showPastDateWarning = false }
+                    onClick = { viewModel.dismissPastDateWarning() }
                 ) {
                     Text("Cancel")
                 }

@@ -14,55 +14,46 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.data.repository.student.StudentRepository
+import com.finalapp.accommodationapp.ui.viewmodels.student.StudentEditProfileViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudentEditProfileScreen(
     onNavigateBack: () -> Unit,
-    onProfileUpdated: () -> Unit
+    onProfileUpdated: () -> Unit,
+    viewModel: StudentEditProfileViewModel = viewModel {
+        StudentEditProfileViewModel(
+            studentRepository = StudentRepository()
+        )
+    }
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val studentRepository = remember { StudentRepository() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-
-    // Form states
-    var isLoading by remember { mutableStateOf(true) }
-    var isSaving by remember { mutableStateOf(false) }
-    var studentId by remember { mutableStateOf(0) }
-
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var studentNumber by remember { mutableStateOf("") }
-    var yearOfStudy by remember { mutableStateOf("") }
-    var program by remember { mutableStateOf("") }
-    var budgetMin by remember { mutableStateOf("") }
-    var budgetMax by remember { mutableStateOf("") }
 
     // Load current profile data
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            isLoading = true
+        val userId = UserSession.currentUser?.userId ?: 0
+        viewModel.loadProfile(userId)
+    }
 
-            val userId = UserSession.currentUser?.userId ?: 0
-            val profile = studentRepository.getStudentProfile(userId)
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
 
-            if (profile != null) {
-                studentId = profile.studentId
-                firstName = profile.firstName
-                lastName = profile.lastName
-                phone = profile.phone
-                studentNumber = profile.studentNumber ?: ""
-                yearOfStudy = profile.yearOfStudy?.toString() ?: ""
-                program = profile.program ?: ""
-                budgetMin = profile.budgetMin?.toString() ?: ""
-                budgetMax = profile.budgetMax?.toString() ?: ""
-            }
-
-            isLoading = false
+    // Handle navigation on profile update
+    LaunchedEffect(uiState.profileUpdated) {
+        if (uiState.profileUpdated) {
+            onProfileUpdated()
+            viewModel.navigationHandled()
         }
     }
 
@@ -79,7 +70,7 @@ fun StudentEditProfileScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -104,31 +95,31 @@ fun StudentEditProfileScreen(
                 )
 
                 OutlinedTextField(
-                    value = firstName,
-                    onValueChange = { firstName = it },
+                    value = uiState.formState.firstName,
+                    onValueChange = { viewModel.updateFirstName(it) },
                     label = { Text("First Name*") },
                     modifier = Modifier.fillMaxWidth(),
-                    isError = firstName.isEmpty(),
-                    enabled = !isSaving
+                    isError = uiState.formState.firstName.isEmpty(),
+                    enabled = !uiState.isSaving
                 )
 
                 OutlinedTextField(
-                    value = lastName,
-                    onValueChange = { lastName = it },
+                    value = uiState.formState.lastName,
+                    onValueChange = { viewModel.updateLastName(it) },
                     label = { Text("Last Name*") },
                     modifier = Modifier.fillMaxWidth(),
-                    isError = lastName.isEmpty(),
-                    enabled = !isSaving
+                    isError = uiState.formState.lastName.isEmpty(),
+                    enabled = !uiState.isSaving
                 )
 
                 OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
+                    value = uiState.formState.phone,
+                    onValueChange = { viewModel.updatePhone(it) },
                     label = { Text("Phone Number*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     modifier = Modifier.fillMaxWidth(),
-                    isError = phone.isEmpty(),
-                    enabled = !isSaving
+                    isError = uiState.formState.phone.isEmpty(),
+                    enabled = !uiState.isSaving
                 )
 
                 Divider()
@@ -140,28 +131,28 @@ fun StudentEditProfileScreen(
                 )
 
                 OutlinedTextField(
-                    value = studentNumber,
-                    onValueChange = { studentNumber = it },
+                    value = uiState.formState.studentNumber,
+                    onValueChange = { viewModel.updateStudentNumber(it) },
                     label = { Text("Student Number") },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSaving
+                    enabled = !uiState.isSaving
                 )
 
                 OutlinedTextField(
-                    value = yearOfStudy,
-                    onValueChange = { yearOfStudy = it },
+                    value = uiState.formState.yearOfStudy,
+                    onValueChange = { viewModel.updateYearOfStudy(it) },
                     label = { Text("Year of Study") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSaving
+                    enabled = !uiState.isSaving
                 )
 
                 OutlinedTextField(
-                    value = program,
-                    onValueChange = { program = it },
+                    value = uiState.formState.program,
+                    onValueChange = { viewModel.updateProgram(it) },
                     label = { Text("Program/Major") },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSaving
+                    enabled = !uiState.isSaving
                 )
 
                 HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
@@ -177,21 +168,21 @@ fun StudentEditProfileScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = budgetMin,
-                        onValueChange = { budgetMin = it },
+                        value = uiState.formState.budgetMin,
+                        onValueChange = { viewModel.updateBudgetMin(it) },
                         label = { Text("Min Budget (€)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
-                        enabled = !isSaving
+                        enabled = !uiState.isSaving
                     )
 
                     OutlinedTextField(
-                        value = budgetMax,
-                        onValueChange = { budgetMax = it },
+                        value = uiState.formState.budgetMax,
+                        onValueChange = { viewModel.updateBudgetMax(it) },
                         label = { Text("Max Budget (€)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
-                        enabled = !isSaving
+                        enabled = !uiState.isSaving
                     )
                 }
 
@@ -199,54 +190,11 @@ fun StudentEditProfileScreen(
 
                 // Save Button
                 Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            // Validate required fields
-                            when {
-                                firstName.isEmpty() -> {
-                                    snackbarHostState.showSnackbar("First name is required")
-                                }
-
-                                lastName.isEmpty() -> {
-                                    snackbarHostState.showSnackbar("Last name is required")
-                                }
-
-                                phone.isEmpty() -> {
-                                    snackbarHostState.showSnackbar("Phone number is required")
-                                }
-
-                                else -> {
-                                    isSaving = true
-
-                                    val success = studentRepository.updateStudentProfile(
-                                        studentId = studentId,
-                                        firstName = firstName.trim(),
-                                        lastName = lastName.trim(),
-                                        phone = phone.trim(),
-                                        studentNumber = studentNumber.trim().ifEmpty { null },
-                                        yearOfStudy = yearOfStudy.toIntOrNull(),
-                                        program = program.trim().ifEmpty { null },
-                                        budgetMin = budgetMin.toDoubleOrNull(),
-                                        budgetMax = budgetMax.toDoubleOrNull()
-                                    )
-
-                                    if (success) {
-                                        snackbarHostState.showSnackbar("Profile updated successfully")
-                                        kotlinx.coroutines.delay(1000)
-                                        onProfileUpdated()
-                                    } else {
-                                        snackbarHostState.showSnackbar("Failed to update profile")
-                                    }
-
-                                    isSaving = false
-                                }
-                            }
-                        }
-                    },
+                    onClick = { viewModel.saveProfile() },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSaving
+                    enabled = !uiState.isSaving
                 ) {
-                    if (isSaving) {
+                    if (uiState.isSaving) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             color = MaterialTheme.colorScheme.onPrimary

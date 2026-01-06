@@ -9,17 +9,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
-import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
 import com.finalapp.accommodationapp.data.repository.UniversityRepository
 import com.finalapp.accommodationapp.data.repository.student.StudentRepository
 import com.finalapp.accommodationapp.data.model.Property
-import com.finalapp.accommodationapp.data.model.University
 import com.finalapp.accommodationapp.data.UserSession
+import com.finalapp.accommodationapp.ui.viewmodels.student.MapViewModel
 import kotlin.math.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,23 +31,16 @@ fun MapScreen(
     onBookingsClick: () -> Unit,
     onFavoritesClick: () -> Unit,
     onProfileClick: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    viewModel: MapViewModel = viewModel {
+        MapViewModel(
+            propertyRepository = PropertyRepository(),
+            universityRepository = UniversityRepository(),
+            studentRepository = StudentRepository()
+        )
+    }
 ) {
-    val propertyRepository = remember { PropertyRepository() }
-    val universityRepository = remember { UniversityRepository() }
-    val studentRepository = remember { StudentRepository() }
-
-    var properties by remember { mutableStateOf<List<Property>>(emptyList()) }
-    var allProperties by remember { mutableStateOf<List<Property>>(emptyList()) }
-    var university by remember { mutableStateOf<University?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    var selectedProperty by remember { mutableStateOf<Property?>(null) }
-    var selectedDistance by remember { mutableStateOf<Float?>(null) }
-    var showUniversityMarker by remember { mutableStateOf(true) }
-    var showFilters by remember { mutableStateOf(false) }
-
-
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     val distanceOptions = listOf(2f, 5f, 10f, null)
     val distanceLabels = listOf("2 km", "5 km", "10 km", "All")
@@ -59,50 +53,20 @@ fun MapScreen(
     }
 
     LaunchedEffect(Unit) {
-        scope.launch {
-            isLoading = true
-
-            val currentUser = UserSession.currentUser
-            if (currentUser?.userType == "student") {
-                val studentProfile = studentRepository.getStudentProfile(currentUser.userId)
-                if (studentProfile != null) {
-                    val loadedUniversity =
-                        universityRepository.getUniversityById(studentProfile.universityId)
-                    university = loadedUniversity
-
-                    loadedUniversity?.let { uni ->
-                        if (uni.latitude != 0.0 && uni.longitude != 0.0) {
-                            cameraPositionState.position = CameraPosition.fromLatLngZoom(
-                                LatLng(uni.latitude, uni.longitude),
-                                12f
-                            )
-                        }
-                    }
-                }
-            }
-
-            allProperties = propertyRepository.getAllProperties()
-            properties = allProperties
-
-            isLoading = false
+        val currentUser = UserSession.currentUser
+        if (currentUser != null) {
+            viewModel.loadMapData(currentUser.userId, currentUser.userType == "student")
         }
     }
 
-    LaunchedEffect(selectedDistance, allProperties, university) {
-        val uni = university
-        val distFilter = selectedDistance // Fix smart cast for selectedDistance
-
-        properties = if (distFilter == null || uni == null) {
-            allProperties
-        } else {
-            allProperties.filter { property ->
-                val distance = calculateDistance(
-                    uni.latitude,
-                    uni.longitude,
-                    property.latitude,
-                    property.longitude
+    // Update camera position when university loads
+    LaunchedEffect(uiState.university) {
+        uiState.university?.let { uni ->
+            if (uni.latitude != 0.0 && uni.longitude != 0.0) {
+                cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                    LatLng(uni.latitude, uni.longitude),
+                    12f
                 )
-                distance <= distFilter // Use local val
             }
         }
     }
@@ -116,7 +80,7 @@ fun MapScreen(
                             "Property Map",
                             style = MaterialTheme.typography.titleMedium
                         )
-                        university?.let {
+                        uiState.university?.let {
                             Text(
                                 it.name,
                                 style = MaterialTheme.typography.bodySmall,
@@ -127,20 +91,20 @@ fun MapScreen(
                 },
                 actions = {
 
-                    IconButton(onClick = { showFilters = !showFilters }) {
+                    IconButton(onClick = { viewModel.toggleFilters() }) {
                         Icon(
                             Icons.Filled.Menu,
                             contentDescription = "Filters",
-                            tint = if (showFilters) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (uiState.showFilters) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
-                    if (university != null) {
-                        IconButton(onClick = { showUniversityMarker = !showUniversityMarker }) {
+                    if (uiState.university != null) {
+                        IconButton(onClick = { viewModel.toggleUniversityMarker() }) {
                             Icon(
                                 Icons.Filled.Star,
-                                contentDescription = if (showUniversityMarker) "Hide University" else "Show University",
-                                tint = if (showUniversityMarker) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                contentDescription = if (uiState.showUniversityMarker) "Hide University" else "Show University",
+                                tint = if (uiState.showUniversityMarker) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -187,7 +151,7 @@ fun MapScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (isLoading) {
+            if (uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -212,8 +176,8 @@ fun MapScreen(
                         compassEnabled = true
                     )
                 ) {
-                    university?.let { uni ->
-                        if (showUniversityMarker && uni.latitude != 0.0 && uni.longitude != 0.0) {
+                    uiState.university?.let { uni ->
+                        if (uiState.showUniversityMarker && uni.latitude != 0.0 && uni.longitude != 0.0) {
                             Marker(
                                 state = MarkerState(
                                     position = LatLng(uni.latitude, uni.longitude)
@@ -225,8 +189,8 @@ fun MapScreen(
                         }
                     }
 
-                    properties.forEach { property ->
-                        val uni = university
+                    uiState.properties.forEach { property ->
+                        val uni = uiState.university
                         val distance = if (uni != null) {
                             calculateDistance(
                                 uni.latitude,
@@ -248,7 +212,7 @@ fun MapScreen(
                                 }
                             },
                             onClick = {
-                                selectedProperty = property
+                                viewModel.selectProperty(property)
                                 false
                             },
                             onInfoWindowClick = {
@@ -258,7 +222,7 @@ fun MapScreen(
                     }
                 }
 
-                if (university != null && showFilters) {
+                if (uiState.university != null && uiState.showFilters) {
                     Card(
                         modifier = Modifier
                             .align(Alignment.TopStart)
@@ -292,15 +256,15 @@ fun MapScreen(
 
                             distanceOptions.forEachIndexed { index, distance ->
                                 FilterChip(
-                                    selected = selectedDistance == distance,
-                                    onClick = { selectedDistance = distance },
+                                    selected = uiState.selectedDistance == distance,
+                                    onClick = { viewModel.selectDistance(distance) },
                                     label = {
                                         Row(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Text(distanceLabels[index])
-                                            if (selectedDistance == distance) {
+                                            if (uiState.selectedDistance == distance) {
                                                 Icon(
                                                     Icons.Filled.Check,
                                                     contentDescription = null,
@@ -316,7 +280,7 @@ fun MapScreen(
                             HorizontalDivider()
 
                             Text(
-                                text = "${properties.size} properties shown",
+                                text = "${uiState.properties.size} properties shown",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -343,15 +307,15 @@ fun MapScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "${properties.size} properties available",
+                                text = "${uiState.properties.size} properties available",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
                 }
 
-                selectedProperty?.let { property ->
-                    val uni = university
+                uiState.selectedProperty?.let { property ->
+                    val uni = uiState.university
                     val distance = if (uni != null) {
                         calculateDistance(
                             uni.latitude,
@@ -365,7 +329,7 @@ fun MapScreen(
                         property = property,
                         distanceFromUniversity = distance,
                         onViewDetails = { onPropertyClick(property.propertyId) },
-                        onDismiss = { selectedProperty = null },
+                        onDismiss = { viewModel.selectProperty(null) },
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(16.dp)

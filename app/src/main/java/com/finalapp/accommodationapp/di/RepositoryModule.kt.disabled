@@ -1,0 +1,66 @@
+package com.finalapp.accommodationapp.di
+
+import android.content.Context
+import com.finalapp.accommodationapp.data.repository.PropertyImageRepository
+import com.finalapp.accommodationapp.data.repository.PropertyRepository
+import com.finalapp.accommodationapp.data.repository.UniversityRepository
+import com.finalapp.accommodationapp.data.repository.UserRepository
+import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
+import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
+import com.finalapp.accommodationapp.data.repository.student.BookingRepository
+import com.finalapp.accommodationapp.data.repository.student.FavoritesRepository
+import com.finalapp.accommodationapp.data.repository.student.ReviewRepository
+import com.finalapp.accommodationapp.data.repository.student.StudentRepository
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+object RepositoryModule {
+
+    @Provides
+    @Singleton
+    fun provideUserRepository(): UserRepository = UserRepository()
+
+    @Provides
+    @Singleton
+    fun providePropertyRepository(): PropertyRepository = PropertyRepository()
+
+    @Provides
+    @Singleton
+    fun providePropertyImageRepository(
+        @ApplicationContext context: Context
+    ): PropertyImageRepository = PropertyImageRepository(context)
+
+    @Provides
+    @Singleton
+    fun provideUniversityRepository(): UniversityRepository = UniversityRepository()
+
+    @Provides
+    @Singleton
+    fun provideStudentRepository(): StudentRepository = StudentRepository()
+
+    @Provides
+    @Singleton
+    fun provideLandlordRepository(): LandlordRepository = LandlordRepository()
+
+    @Provides
+    @Singleton
+    fun provideBookingRepository(): BookingRepository = BookingRepository()
+
+    @Provides
+    @Singleton
+    fun provideFavoritesRepository(): FavoritesRepository = FavoritesRepository()
+
+    @Provides
+    @Singleton
+    fun provideReviewRepository(): ReviewRepository = ReviewRepository()
+
+    @Provides
+    @Singleton
+    fun provideAdminRepository(): AdminRepository = AdminRepository()
+}

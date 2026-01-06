@@ -16,10 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
-import com.finalapp.accommodationapp.data.model.student.StudentProfile
 import com.finalapp.accommodationapp.data.repository.student.StudentRepository
-import kotlinx.coroutines.launch
+import com.finalapp.accommodationapp.ui.viewmodels.student.StudentProfileViewModel
 import java.text.NumberFormat
 import java.util.*
 
@@ -27,25 +28,20 @@ import java.util.*
 @Composable
 fun StudentProfileScreen(
     onNavigateBack: () -> Unit,
-    onEditProfile: () -> Unit
+    onEditProfile: () -> Unit,
+    viewModel: StudentProfileViewModel = viewModel {
+        StudentProfileViewModel(
+            studentRepository = StudentRepository()
+        )
+    }
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val studentRepository = remember { StudentRepository() }
-
-    var profile by remember { mutableStateOf<StudentProfile?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "IE"))
 
     // Load profile
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            isLoading = true
-
-            val userId = UserSession.currentUser?.userId ?: 0
-            profile = studentRepository.getStudentProfile(userId)
-
-            isLoading = false
-        }
+        val userId = UserSession.currentUser?.userId ?: 0
+        viewModel.loadProfile(userId)
     }
 
     Scaffold(
@@ -65,7 +61,7 @@ fun StudentProfileScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -74,7 +70,7 @@ fun StudentProfileScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (profile == null) {
+        } else if (uiState.profile == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -112,7 +108,7 @@ fun StudentProfileScreen(
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 Text(
-                                    text = "${profile?.firstName?.firstOrNull() ?: 'S'}${profile?.lastName?.firstOrNull() ?: ""}",
+                                    text = "${uiState.profile?.firstName?.firstOrNull() ?: 'S'}${uiState.profile?.lastName?.firstOrNull() ?: ""}",
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.onPrimary
                                 )
@@ -122,7 +118,7 @@ fun StudentProfileScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "${profile?.firstName} ${profile?.lastName}",
+                            text = "${uiState.profile?.firstName} ${uiState.profile?.lastName}",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -146,7 +142,7 @@ fun StudentProfileScreen(
                     ProfileSection(title = "Personal Information") {
                         ProfileField(
                             label = "Phone",
-                            value = profile?.phone ?: "Not provided",
+                            value = uiState.profile?.phone ?: "Not provided",
                             icon = Icons.Filled.Phone
                         )
                     }
@@ -155,25 +151,25 @@ fun StudentProfileScreen(
                     ProfileSection(title = "Academic Information") {
                         ProfileField(
                             label = "University",
-                            value = profile?.universityName ?: "Not specified",
+                            value = uiState.profile?.universityName ?: "Not specified",
                             icon = Icons.Filled.Home
                         )
 
                         ProfileField(
                             label = "Student Number",
-                            value = profile?.studentNumber ?: "Not provided",
+                            value = uiState.profile?.studentNumber ?: "Not provided",
                             icon = Icons.Filled.Person
                         )
 
                         ProfileField(
                             label = "Program",
-                            value = profile?.program ?: "Not specified",
+                            value = uiState.profile?.program ?: "Not specified",
                             icon = Icons.Filled.Edit
                         )
 
                         ProfileField(
                             label = "Year of Study",
-                            value = profile?.yearOfStudy?.toString() ?: "Not specified",
+                            value = uiState.profile?.yearOfStudy?.toString() ?: "Not specified",
                             icon = Icons.Filled.DateRange
                         )
                     }
@@ -182,10 +178,10 @@ fun StudentProfileScreen(
                     ProfileSection(title = "Accommodation Preferences") {
                         ProfileField(
                             label = "Budget Range",
-                            value = if (profile?.budgetMin != null && profile?.budgetMax != null) {
-                                "${currencyFormat.format(profile?.budgetMin)} - ${
+                            value = if (uiState.profile?.budgetMin != null && uiState.profile?.budgetMax != null) {
+                                "${currencyFormat.format(uiState.profile?.budgetMin)} - ${
                                     currencyFormat.format(
-                                        profile?.budgetMax
+                                        uiState.profile?.budgetMax
                                     )
                                 }"
                             } else {

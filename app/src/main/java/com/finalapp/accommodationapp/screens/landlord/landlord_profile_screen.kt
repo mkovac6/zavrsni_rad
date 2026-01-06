@@ -18,33 +18,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
-import com.finalapp.accommodationapp.data.model.landlord.Landlord
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
-import kotlinx.coroutines.launch
+import com.finalapp.accommodationapp.ui.viewmodels.landlord.LandlordProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandlordProfileScreen(
     onNavigateBack: () -> Unit,
-    onEditProfile: () -> Unit
+    onEditProfile: () -> Unit,
+    viewModel: LandlordProfileViewModel = viewModel {
+        LandlordProfileViewModel(
+            landlordRepository = LandlordRepository()
+        )
+    }
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val landlordRepository = remember { LandlordRepository() }
-
-    var landlord by remember { mutableStateOf<Landlord?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     // Load landlord profile
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            isLoading = true
-
-            val userId = UserSession.currentUser?.userId ?: 0
-            landlord = landlordRepository.getLandlordByUserId(userId)
-
-            isLoading = false
-        }
+        val userId = UserSession.currentUser?.userId ?: 0
+        viewModel.loadProfile(userId)
     }
 
     Scaffold(
@@ -64,7 +60,7 @@ fun LandlordProfileScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -73,7 +69,7 @@ fun LandlordProfileScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (landlord == null) {
+        } else if (uiState.landlord == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -111,7 +107,7 @@ fun LandlordProfileScreen(
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 Text(
-                                    text = "${landlord?.firstName?.firstOrNull() ?: 'L'}${landlord?.lastName?.firstOrNull() ?: ""}",
+                                    text = "${uiState.landlord?.firstName?.firstOrNull() ?: 'L'}${uiState.landlord?.lastName?.firstOrNull() ?: ""}",
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.onPrimary
                                 )
@@ -121,7 +117,7 @@ fun LandlordProfileScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "${landlord?.firstName} ${landlord?.lastName}",
+                            text = "${uiState.landlord?.firstName} ${uiState.landlord?.lastName}",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -133,7 +129,7 @@ fun LandlordProfileScreen(
                         )
 
                         // Verification Badge
-                        if (landlord?.isVerified == true) {
+                        if (uiState.landlord?.isVerified == true) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 verticalAlignment = Alignment.CenterVertically
@@ -154,7 +150,7 @@ fun LandlordProfileScreen(
                         }
 
                         // Rating
-                        landlord?.rating?.let { rating ->
+                        uiState.landlord?.rating?.let { rating ->
                             if (rating > 0) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(
@@ -189,7 +185,7 @@ fun LandlordProfileScreen(
                     LandlordProfileSection(title = "Personal Information") {
                         LandlordProfileField(
                             label = "Phone",
-                            value = landlord?.phone ?: "Not provided",
+                            value = uiState.landlord?.phone ?: "Not provided",
                             icon = Icons.Filled.Phone
                         )
                     }
@@ -198,13 +194,13 @@ fun LandlordProfileScreen(
                     LandlordProfileSection(title = "Business Information") {
                         LandlordProfileField(
                             label = "Company Name",
-                            value = landlord?.companyName ?: "Not specified",
+                            value = uiState.landlord?.companyName ?: "Not specified",
                             icon = Icons.Filled.Home
                         )
 
                         LandlordProfileField(
                             label = "Landlord ID",
-                            value = "#${landlord?.landlordId}",
+                            value = "#${uiState.landlord?.landlordId}",
                             icon = Icons.Filled.Person
                         )
                     }
@@ -213,9 +209,9 @@ fun LandlordProfileScreen(
                     LandlordProfileSection(title = "Account Status") {
                         LandlordProfileField(
                             label = "Verification Status",
-                            value = if (landlord?.isVerified == true) "Verified" else "Not Verified",
-                            icon = if (landlord?.isVerified == true) Icons.Filled.Check else Icons.Filled.Close,
-                            valueColor = if (landlord?.isVerified == true)
+                            value = if (uiState.landlord?.isVerified == true) "Verified" else "Not Verified",
+                            icon = if (uiState.landlord?.isVerified == true) Icons.Filled.Check else Icons.Filled.Close,
+                            valueColor = if (uiState.landlord?.isVerified == true)
                                 androidx.compose.ui.graphics.Color(0xFF4CAF50)
                             else
                                 MaterialTheme.colorScheme.error

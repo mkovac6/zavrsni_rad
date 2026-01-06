@@ -15,61 +15,42 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.repository.UserRepository
 import com.finalapp.accommodationapp.data.repository.student.StudentRepository
 import com.finalapp.accommodationapp.data.repository.UniversityRepository
 import com.finalapp.accommodationapp.data.model.University
-import kotlinx.coroutines.launch
+import com.finalapp.accommodationapp.ui.viewmodels.admin.AdminAddStudentViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminAddStudentScreen(
     onNavigateBack: () -> Unit,
-    onStudentAdded: () -> Unit
+    onStudentAdded: () -> Unit,
+    viewModel: AdminAddStudentViewModel = viewModel {
+        AdminAddStudentViewModel(
+            userRepository = UserRepository(),
+            studentRepository = StudentRepository(),
+            universityRepository = UniversityRepository()
+        )
+    }
 ) {
-    val userRepository = remember { UserRepository() }
-    val studentRepository = remember { StudentRepository() }
-    val universityRepository = remember { UniversityRepository() }
-    val coroutineScope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-
-    // Form states
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var studentNumber by remember { mutableStateOf("") }
-    var yearOfStudy by remember { mutableStateOf("") }
-    var program by remember { mutableStateOf("") }
-    var budgetMin by remember { mutableStateOf("") }
-    var budgetMax by remember { mutableStateOf("") }
-
-    // University selection
-    var universities by remember { mutableStateOf<List<University>>(emptyList()) }
-    var selectedUniversity by remember { mutableStateOf<University?>(null) }
-    var universityDropdownExpanded by remember { mutableStateOf(false) }
-
-    var passwordVisible by remember { mutableStateOf(false) }
-    var isCreating by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(true) }
 
     // Load universities
     LaunchedEffect(Unit) {
-        isLoading = true
-        universities = universityRepository.getAllUniversities()
-        isLoading = false
+        viewModel.loadUniversities()
     }
 
-    // Validation
-    val isFormValid = email.isNotBlank() &&
-            password.isNotBlank() &&
-            firstName.isNotBlank() &&
-            lastName.isNotBlank() &&
-            phone.isNotBlank() &&
-            selectedUniversity != null &&
-            yearOfStudy.toIntOrNull() != null &&
-            (budgetMin.toDoubleOrNull() ?: 0.0) <= (budgetMax.toDoubleOrNull() ?: Double.MAX_VALUE)
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -84,7 +65,7 @@ fun AdminAddStudentScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -109,32 +90,32 @@ fun AdminAddStudentScreen(
                 )
 
                 OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
+                    value = uiState.formState.email,
+                    onValueChange = { viewModel.updateEmail(it) },
                     label = { Text("Email*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth(),
-                    isError = email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(
-                        email
+                    isError = uiState.formState.email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(
+                        uiState.formState.email
                     ).matches()
                 )
 
                 OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
+                    value = uiState.formState.password,
+                    onValueChange = { viewModel.updatePassword(it) },
                     label = { Text("Password*") },
                     leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
                     trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        IconButton(onClick = { viewModel.togglePasswordVisibility() }) {
                             Icon(
                                 Icons.Filled.Lock,
-                                contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                                tint = if (passwordVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                contentDescription = if (uiState.passwordVisible) "Hide password" else "Show password",
+                                tint = if (uiState.passwordVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     },
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    visualTransformation = if (uiState.passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -151,23 +132,23 @@ fun AdminAddStudentScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = firstName,
-                        onValueChange = { firstName = it },
+                        value = uiState.formState.firstName,
+                        onValueChange = { viewModel.updateFirstName(it) },
                         label = { Text("First Name*") },
                         modifier = Modifier.weight(1f)
                     )
 
                     OutlinedTextField(
-                        value = lastName,
-                        onValueChange = { lastName = it },
+                        value = uiState.formState.lastName,
+                        onValueChange = { viewModel.updateLastName(it) },
                         label = { Text("Last Name*") },
                         modifier = Modifier.weight(1f)
                     )
                 }
 
                 OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
+                    value = uiState.formState.phone,
+                    onValueChange = { viewModel.updatePhone(it) },
                     label = { Text("Phone Number*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null) },
@@ -175,8 +156,8 @@ fun AdminAddStudentScreen(
                 )
 
                 OutlinedTextField(
-                    value = studentNumber,
-                    onValueChange = { studentNumber = it },
+                    value = uiState.formState.studentNumber,
+                    onValueChange = { viewModel.updateStudentNumber(it) },
                     label = { Text("Student ID") },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -191,30 +172,29 @@ fun AdminAddStudentScreen(
 
                 // University Dropdown
                 ExposedDropdownMenuBox(
-                    expanded = universityDropdownExpanded,
-                    onExpandedChange = { universityDropdownExpanded = !universityDropdownExpanded }
+                    expanded = uiState.universityDropdownExpanded,
+                    onExpandedChange = { viewModel.toggleUniversityDropdown() }
                 ) {
                     OutlinedTextField(
-                        value = selectedUniversity?.name ?: "",
+                        value = uiState.formState.selectedUniversity?.name ?: "",
                         onValueChange = { },
                         readOnly = true,
                         label = { Text("University*") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = universityDropdownExpanded) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = uiState.universityDropdownExpanded) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor()
                     )
 
                     ExposedDropdownMenu(
-                        expanded = universityDropdownExpanded,
-                        onDismissRequest = { universityDropdownExpanded = false }
+                        expanded = uiState.universityDropdownExpanded,
+                        onDismissRequest = { viewModel.toggleUniversityDropdown() }
                     ) {
-                        universities.forEach { university ->
+                        uiState.universities.forEach { university ->
                             DropdownMenuItem(
                                 text = { Text("${university.name} - ${university.city}") },
                                 onClick = {
-                                    selectedUniversity = university
-                                    universityDropdownExpanded = false
+                                    viewModel.selectUniversity(university)
                                 }
                             )
                         }
@@ -226,16 +206,16 @@ fun AdminAddStudentScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = yearOfStudy,
-                        onValueChange = { yearOfStudy = it },
+                        value = uiState.formState.yearOfStudy,
+                        onValueChange = { viewModel.updateYearOfStudy(it) },
                         label = { Text("Year of Study*") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f)
                     )
 
                     OutlinedTextField(
-                        value = program,
-                        onValueChange = { program = it },
+                        value = uiState.formState.program,
+                        onValueChange = { viewModel.updateProgram(it) },
                         label = { Text("Program/Major") },
                         modifier = Modifier.weight(2f)
                     )
@@ -254,16 +234,16 @@ fun AdminAddStudentScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = budgetMin,
-                        onValueChange = { budgetMin = it },
+                        value = uiState.formState.budgetMin,
+                        onValueChange = { viewModel.updateBudgetMin(it) },
                         label = { Text("Min Budget (€)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f)
                     )
 
                     OutlinedTextField(
-                        value = budgetMax,
-                        onValueChange = { budgetMax = it },
+                        value = uiState.formState.budgetMax,
+                        onValueChange = { viewModel.updateBudgetMax(it) },
                         label = { Text("Max Budget (€)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f)
@@ -273,58 +253,12 @@ fun AdminAddStudentScreen(
                 // Create Button
                 Button(
                     onClick = {
-                        coroutineScope.launch {
-                            isCreating = true
-
-                            try {
-                                // Check if email already exists
-                                val emailExists = userRepository.checkEmailExists(email)
-                                if (emailExists) {
-                                    snackbarHostState.showSnackbar("Email already exists")
-                                    isCreating = false
-                                    return@launch
-                                }
-
-                                // Create user account
-                                val user = userRepository.register(email, password, "student")
-                                if (user != null) {
-                                    // Create student profile
-                                    val profileCreated = studentRepository.createStudentProfile(
-                                        userId = user.userId,
-                                        universityId = selectedUniversity!!.universityId,
-                                        firstName = firstName.trim(),
-                                        lastName = lastName.trim(),
-                                        phone = phone.trim(),
-                                        studentNumber = studentNumber.trim().ifEmpty { null },
-                                        yearOfStudy = yearOfStudy.toIntOrNull(),
-                                        program = program.trim().ifEmpty { null },
-                                        preferredMoveInDate = null,
-                                        budgetMin = budgetMin.toDoubleOrNull(),
-                                        budgetMax = budgetMax.toDoubleOrNull()
-                                    )
-
-                                    if (profileCreated) {
-                                        // Update profile completion status
-                                        userRepository.updateUserProfileStatus(user.userId, true)
-                                        snackbarHostState.showSnackbar("Student created successfully!")
-                                        onStudentAdded()
-                                    } else {
-                                        snackbarHostState.showSnackbar("Failed to create student profile")
-                                    }
-                                } else {
-                                    snackbarHostState.showSnackbar("Failed to create user account")
-                                }
-                            } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Error: ${e.message}")
-                            }
-
-                            isCreating = false
-                        }
+                        viewModel.createStudent(onSuccess = onStudentAdded)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = isFormValid && !isCreating
+                    enabled = viewModel.isFormValid && !uiState.isCreating
                 ) {
-                    if (isCreating) {
+                    if (uiState.isCreating) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             color = MaterialTheme.colorScheme.onPrimary

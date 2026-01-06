@@ -13,61 +13,44 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.finalapp.accommodationapp.data.AuthStateManager
 import com.finalapp.accommodationapp.data.repository.UserRepository
-import com.finalapp.accommodationapp.data.UserSession
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
+import com.finalapp.accommodationapp.ui.viewmodels.auth.LoginViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     onNavigateToRegister: () -> Unit,
-    onLoginSuccess: (String) -> Unit
+    onLoginSuccess: (String) -> Unit,
+    viewModel: LoginViewModel = viewModel {
+        LoginViewModel(
+            userRepository = UserRepository(),
+            authStateManager = AuthStateManager()
+        )
+    }
 ) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successMessage by remember { mutableStateOf<String?>(null) }
-
-    val coroutineScope = rememberCoroutineScope()
-    val userRepository = remember { UserRepository() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    suspend fun performLogin() {
-        isLoading = true
-        errorMessage = null
-
-        val user = userRepository.debugLogin(email.trim(), password)
-
-        if (user != null) {
-            UserSession.currentUser = user
-            val firstName = when (user.email) {
-                "ana.kovac@student.hr" -> "Ana"
-                "marko.novak@gmail.com" -> "Marko"
-                "admin@accommodation.com" -> "Admin"
-                else -> user.email.substringBefore("@")
-            }
-            successMessage = "Welcome back, $firstName!"
-
-            // Show success message briefly before navigating
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
             snackbarHostState.showSnackbar(
-                message = "Login successful! Welcome $firstName",
+                message = message,
                 duration = SnackbarDuration.Short
             )
-
-            // Small delay to show the success message
-            delay(1000)
-            onLoginSuccess(user.userType)
-        } else {
-            errorMessage = "Invalid email or password"
-            snackbarHostState.showSnackbar(
-                message = "Login failed. Please check your credentials.",
-                duration = SnackbarDuration.Short
-            )
+            viewModel.snackbarShown()
         }
+    }
 
-        isLoading = false
+    // Handle navigation on successful login
+    LaunchedEffect(uiState.loginSuccessUserType) {
+        uiState.loginSuccessUserType?.let { userType ->
+            onLoginSuccess(userType)
+            viewModel.navigationHandled()
+        }
     }
 
     Scaffold(
@@ -98,35 +81,29 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(48.dp))
 
             OutlinedTextField(
-                value = email,
-                onValueChange = {
-                    email = it
-                    errorMessage = null
-                },
+                value = uiState.email,
+                onValueChange = { viewModel.updateEmail(it) },
                 label = { Text("Email") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 singleLine = true,
-                isError = errorMessage != null
+                isError = uiState.errorMessage != null
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = password,
-                onValueChange = {
-                    password = it
-                    errorMessage = null
-                },
+                value = uiState.password,
+                onValueChange = { viewModel.updatePassword(it) },
                 label = { Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 singleLine = true,
-                isError = errorMessage != null
+                isError = uiState.errorMessage != null
             )
 
-            if (errorMessage != null) {
+            if (uiState.errorMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -135,7 +112,7 @@ fun LoginScreen(
                     )
                 ) {
                     Text(
-                        text = errorMessage!!,
+                        text = uiState.errorMessage!!,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         fontSize = 14.sp,
                         modifier = Modifier.padding(12.dp)
@@ -143,7 +120,7 @@ fun LoginScreen(
                 }
             }
 
-            if (successMessage != null) {
+            if (uiState.successMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -152,7 +129,7 @@ fun LoginScreen(
                     )
                 ) {
                     Text(
-                        text = successMessage!!,
+                        text = uiState.successMessage!!,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         fontSize = 14.sp,
                         modifier = Modifier.padding(12.dp)
@@ -163,19 +140,11 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = {
-                    if (email.isBlank() || password.isBlank()) {
-                        errorMessage = "Please enter email and password"
-                    } else {
-                        coroutineScope.launch {
-                            performLogin()
-                        }
-                    }
-                },
+                onClick = { viewModel.login() },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                enabled = !uiState.isLoading
             ) {
-                if (isLoading) {
+                if (uiState.isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         color = MaterialTheme.colorScheme.onPrimary,
@@ -190,7 +159,7 @@ fun LoginScreen(
 
             TextButton(
                 onClick = { onNavigateToRegister() },
-                enabled = !isLoading
+                enabled = !uiState.isLoading
             ) {
                 Text("Don't have an account? Register")
             }
@@ -222,14 +191,10 @@ fun LoginScreen(
                         // Student login button
                         OutlinedButton(
                             onClick = {
-                                email = "ana.kovac@student.hr"
-                                password = "password123"
-                                coroutineScope.launch {
-                                    performLogin()
-                                }
+                                viewModel.quickLogin("ana.kovac@student.hr", "password123")
                             },
                             modifier = Modifier.weight(1f),
-                            enabled = !isLoading
+                            enabled = !uiState.isLoading
                         ) {
                             Icon(
                                 Icons.Filled.Person,
@@ -243,14 +208,10 @@ fun LoginScreen(
                         // Landlord login button
                         OutlinedButton(
                             onClick = {
-                                email = "marko.novak@gmail.com"
-                                password = "password123"
-                                coroutineScope.launch {
-                                    performLogin()
-                                }
+                                viewModel.quickLogin("marko.novak@gmail.com", "password123")
                             },
                             modifier = Modifier.weight(1f),
-                            enabled = !isLoading
+                            enabled = !uiState.isLoading
                         ) {
                             Icon(
                                 Icons.Filled.Home,
@@ -264,14 +225,10 @@ fun LoginScreen(
                         // Admin login button
                         OutlinedButton(
                             onClick = {
-                                email = "admin@accommodation.com"
-                                password = "admin123"
-                                coroutineScope.launch {
-                                    performLogin()
-                                }
+                                viewModel.quickLogin("admin@accommodation.com", "admin123")
                             },
                             modifier = Modifier.weight(1f),
-                            enabled = !isLoading
+                            enabled = !uiState.isLoading
                         ) {
                             Icon(
                                 Icons.Filled.Settings,

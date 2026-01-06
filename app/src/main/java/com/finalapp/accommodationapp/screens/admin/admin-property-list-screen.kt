@@ -12,33 +12,39 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.model.Property
+import com.finalapp.accommodationapp.ui.viewmodels.admin.AdminPropertyListViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminPropertyListScreen(
     onNavigateBack: () -> Unit,
     onAddProperty: () -> Unit,
-    onPropertyClick: (Int) -> Unit
+    onPropertyClick: (Int) -> Unit,
+    viewModel: AdminPropertyListViewModel = viewModel {
+        AdminPropertyListViewModel(
+            propertyRepository = PropertyRepository(),
+            adminRepository = AdminRepository()
+        )
+    }
 ) {
-    val propertyRepository = remember { PropertyRepository() }
-    val adminRepository = remember { AdminRepository() }
-    var properties by remember { mutableStateOf<List<Property>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var propertyToDelete by remember { mutableStateOf<Property?>(null) }
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Load properties
     LaunchedEffect(Unit) {
-        scope.launch {
-            isLoading = true
-            // Pass includeInactive = true for admin view
-            properties = propertyRepository.getAllProperties(includeInactive = true)
-            isLoading = false
+        viewModel.loadProperties()
+    }
+
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
         }
     }
 
@@ -60,7 +66,7 @@ fun AdminPropertyListScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -69,7 +75,7 @@ fun AdminPropertyListScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (properties.isEmpty()) {
+        } else if (uiState.properties.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -113,8 +119,8 @@ fun AdminPropertyListScreen(
                                 .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val activeCount = properties.count { it.isActive }
-                            val inactiveCount = properties.size - activeCount
+                            val activeCount = uiState.properties.count { it.isActive }
+                            val inactiveCount = uiState.properties.size - activeCount
 
                             Icon(
                                 Icons.Filled.Home,
@@ -124,7 +130,7 @@ fun AdminPropertyListScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    "Total Properties: ${properties.size}",
+                                    "Total Properties: ${uiState.properties.size}",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -138,31 +144,15 @@ fun AdminPropertyListScreen(
                     }
                 }
 
-                items(properties) { property ->
+                items(uiState.properties) { property ->
                     AdminPropertyCard(
                         property = property,
                         onDelete = {
-                            propertyToDelete = property
-                            showDeleteDialog = true
+                            viewModel.showDeleteDialog(property)
                         },
                         onClick = { onPropertyClick(property.propertyId) },
                         onToggleStatus = {
-                            scope.launch {
-                                val success = propertyRepository.updatePropertyStatus(
-                                    property.propertyId,
-                                    !property.isActive
-                                )
-                                if (success) {
-                                    // Reload properties
-                                    properties = propertyRepository.getAllProperties(includeInactive = true)
-                                    snackbarHostState.showSnackbar(
-                                        if (!property.isActive) "Property activated"
-                                        else "Property deactivated"
-                                    )
-                                } else {
-                                    snackbarHostState.showSnackbar("Failed to update property status")
-                                }
-                            }
+                            viewModel.togglePropertyStatus(property.propertyId, property.isActive)
                         }
                     )
                 }
@@ -171,33 +161,19 @@ fun AdminPropertyListScreen(
     }
 
     // Delete confirmation dialog
-    if (showDeleteDialog) {
+    if (uiState.showDeleteDialog) {
         AlertDialog(
             onDismissRequest = {
-                showDeleteDialog = false
-                propertyToDelete = null
+                viewModel.hideDeleteDialog()
             },
             title = { Text("Delete Property") },
             text = {
-                Text("Are you sure you want to delete \"${propertyToDelete?.title}\"? This action cannot be undone.")
+                Text("Are you sure you want to delete \"${uiState.propertyToDelete?.title}\"? This action cannot be undone.")
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        propertyToDelete?.let { property ->
-                            scope.launch {
-                                showDeleteDialog = false
-                                propertyToDelete = null
-
-                                val success = adminRepository.deleteProperty(property.propertyId)
-                                if (success) {
-                                    properties = propertyRepository.getAllProperties(includeInactive = true)
-                                    snackbarHostState.showSnackbar("Property deleted successfully")
-                                } else {
-                                    snackbarHostState.showSnackbar("Failed to delete property")
-                                }
-                            }
-                        }
+                        viewModel.deleteProperty()
                     }
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -206,8 +182,7 @@ fun AdminPropertyListScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        showDeleteDialog = false
-                        propertyToDelete = null
+                        viewModel.hideDeleteDialog()
                     }
                 ) {
                     Text("Cancel")

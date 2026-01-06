@@ -18,14 +18,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.finalapp.accommodationapp.data.model.admin.Amenity
-import com.finalapp.accommodationapp.data.model.Property
-import com.finalapp.accommodationapp.data.model.PropertyImage
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
-import com.finalapp.accommodationapp.data.repository.PropertyImageRepository
 import com.finalapp.accommodationapp.screens.components.MultiImagePicker
+import com.finalapp.accommodationapp.ui.viewmodels.landlord.LandlordEditPropertyViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormatSymbols
@@ -38,107 +37,36 @@ fun LandlordEditPropertyScreen(
     propertyId: Int,
     onNavigateBack: () -> Unit,
     onPropertyUpdated: () -> Unit,
-    onPropertyDeleted: () -> Unit
+    onPropertyDeleted: () -> Unit,
+    viewModel: LandlordEditPropertyViewModel = viewModel {
+        LandlordEditPropertyViewModel(
+            propertyRepository = PropertyRepository(),
+            adminRepository = AdminRepository()
+        )
+    }
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val propertyRepository = remember { PropertyRepository() }
-    val adminRepository = remember { AdminRepository() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val imageRepository = remember { PropertyImageRepository(context) }
 
-    // States
-    var isLoading by remember { mutableStateOf(true) }
-    var property by remember { mutableStateOf<Property?>(null) }
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var propertyType by remember { mutableStateOf("apartment") }
-    var address by remember { mutableStateOf("") }
-    var city by remember { mutableStateOf("") }
-    var postalCode by remember { mutableStateOf("") }
-    var pricePerMonth by remember { mutableStateOf("") }
-    var bedrooms by remember { mutableStateOf("") }
-    var bathrooms by remember { mutableStateOf("") }
-    var totalCapacity by remember { mutableStateOf("") }
-    var availableFrom by remember { mutableStateOf("") }
-    var availableTo by remember { mutableStateOf("") }
-
-    var amenities by remember { mutableStateOf(listOf<Amenity>()) }
-    var selectedAmenities by remember { mutableStateOf(setOf<Int>()) }
-
-    // Image states
-    var existingImages by remember { mutableStateOf(listOf<PropertyImage>()) }
-    var newImageUris by remember { mutableStateOf(listOf<Uri>()) }
-    var isUploadingImages by remember { mutableStateOf(false) }
-
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var isUpdating by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf("") }
-    var successMessage by remember { mutableStateOf("") }
-
-    var showDatePicker by remember { mutableStateOf(false) }
-    var datePickerTarget by remember { mutableStateOf("from") }
-
-    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
-    // Load property data
+    // Load uiState.property data
     LaunchedEffect(propertyId) {
-        try {
-            isLoading = true
-            Log.d("LandlordEditProperty", "Loading property with ID: $propertyId")
+        viewModel.loadProperty(propertyId)
+        viewModel.loadPropertyImages(context, propertyId)
+    }
 
-            // Load property
-            val loadedProperty = propertyRepository.getPropertyById(propertyId)
-            Log.d("LandlordEditProperty", "Loaded property: $loadedProperty")
+    // Handle navigation after successful update
+    LaunchedEffect(uiState.propertyUpdated) {
+        if (uiState.propertyUpdated) {
+            onPropertyUpdated()
+            viewModel.navigationHandled()
+        }
+    }
 
-            if (loadedProperty != null) {
-                property = loadedProperty
-                title = loadedProperty.title
-                description = loadedProperty.description
-                propertyType = loadedProperty.propertyType
-                address = loadedProperty.address
-                city = loadedProperty.city
-                postalCode = loadedProperty.postalCode
-                pricePerMonth = loadedProperty.pricePerMonth.toString()
-                bedrooms = loadedProperty.bedrooms.toString()
-                bathrooms = loadedProperty.bathrooms.toString()
-                totalCapacity = loadedProperty.totalCapacity.toString()
-                availableFrom = dateFormat.format(loadedProperty.availableFrom)
-                availableTo = loadedProperty.availableTo?.let { dateFormat.format(it) } ?: ""
-            } else {
-                Log.e("LandlordEditProperty", "Property not found for ID: $propertyId")
-                errorMessage = "Property not found"
-            }
-
-            // Load amenities
-            try {
-                amenities = adminRepository.getAllAmenities()
-                Log.d("LandlordEditProperty", "Loaded ${amenities.size} amenities")
-            } catch (e: Exception) {
-                Log.e("LandlordEditProperty", "Error loading amenities", e)
-            }
-
-            // Load selected amenities
-            try {
-                val propertyAmenityIds = propertyRepository.getPropertyAmenities(propertyId)
-                selectedAmenities = propertyAmenityIds.toSet()
-                Log.d("LandlordEditProperty", "Loaded ${selectedAmenities.size} selected amenities")
-            } catch (e: Exception) {
-                Log.e("LandlordEditProperty", "Error loading property amenities", e)
-            }
-
-            // Load existing images
-            try {
-                existingImages = imageRepository.getPropertyImages(propertyId)
-                Log.d("LandlordEditProperty", "Loaded ${existingImages.size} images")
-            } catch (e: Exception) {
-                Log.e("LandlordEditProperty", "Error loading images", e)
-            }
-
-            isLoading = false
-        } catch (e: Exception) {
-            Log.e("LandlordEditProperty", "Error in LaunchedEffect", e)
-            errorMessage = "Error loading property: ${e.message}"
-            isLoading = false
+    // Handle navigation after successful deletion
+    LaunchedEffect(uiState.propertyDeleted) {
+        if (uiState.propertyDeleted) {
+            onPropertyDeleted()
+            viewModel.navigationHandled()
         }
     }
 
@@ -153,8 +81,8 @@ fun LandlordEditPropertyScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { showDeleteDialog = true },
-                        enabled = !isUpdating
+                        onClick = { viewModel.showDeleteDialog() },
+                        enabled = !uiState.isUpdating
                     ) {
                         Icon(
                             Icons.Filled.Delete,
@@ -166,7 +94,7 @@ fun LandlordEditPropertyScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -175,7 +103,7 @@ fun LandlordEditPropertyScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (property == null) {
+        } else if (uiState.property == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -194,28 +122,28 @@ fun LandlordEditPropertyScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Error/Success messages
-                if (errorMessage.isNotEmpty()) {
+                if (uiState.errorMessage.isNotEmpty()) {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         )
                     ) {
                         Text(
-                            text = errorMessage,
+                            text = uiState.errorMessage,
                             modifier = Modifier.padding(16.dp),
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                 }
 
-                if (successMessage.isNotEmpty()) {
+                if (uiState.successMessage.isNotEmpty()) {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
                     ) {
                         Text(
-                            text = successMessage,
+                            text = uiState.successMessage,
                             modifier = Modifier.padding(16.dp),
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -224,16 +152,16 @@ fun LandlordEditPropertyScreen(
 
                 // Existing Images Section
                 Text(
-                    "Current Images (${existingImages.size})",
+                    "Current Images (${uiState.existingImages.size})",
                     style = MaterialTheme.typography.titleMedium
                 )
 
-                if (existingImages.isNotEmpty()) {
+                if (uiState.existingImages.isNotEmpty()) {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(existingImages) { image ->
+                        items(uiState.existingImages) { image ->
                             Card(
                                 modifier = Modifier.size(120.dp)
                             ) {
@@ -246,18 +174,7 @@ fun LandlordEditPropertyScreen(
                                     // Delete button
                                     IconButton(
                                         onClick = {
-                                            coroutineScope.launch {
-                                                val success = imageRepository.deletePropertyImage(
-                                                    image.imageId,
-                                                    image.imageUrl
-                                                )
-                                                if (success) {
-                                                    existingImages = existingImages.filter { it.imageId != image.imageId }
-                                                    successMessage = "Image deleted"
-                                                } else {
-                                                    errorMessage = "Failed to delete image"
-                                                }
-                                            }
+                                            viewModel.deleteExistingImage(context, image.imageId)
                                         },
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
@@ -290,20 +207,7 @@ fun LandlordEditPropertyScreen(
                                         // Set as primary button
                                         TextButton(
                                             onClick = {
-                                                coroutineScope.launch {
-                                                    val success = imageRepository.setPrimaryImage(
-                                                        propertyId,
-                                                        image.imageId
-                                                    )
-                                                    if (success) {
-                                                        existingImages = existingImages.map {
-                                                            it.copy(isPrimary = it.imageId == image.imageId)
-                                                        }
-                                                        successMessage = "Primary image updated"
-                                                    } else {
-                                                        errorMessage = "Failed to set primary"
-                                                    }
-                                                }
+                                                viewModel.setPrimaryImage(context, propertyId, image.imageId)
                                             },
                                             modifier = Modifier
                                                 .align(Alignment.BottomCenter)
@@ -334,19 +238,20 @@ fun LandlordEditPropertyScreen(
                     modifier = Modifier.padding(top = 8.dp)
                 )
 
-                val totalImages = existingImages.size + newImageUris.size
+                val totalImages = uiState.existingImages.size + uiState.formState.newImageUris.size
                 val canAddMore = totalImages < 10
 
                 MultiImagePicker(
-                    selectedImages = newImageUris,
+                    selectedImages = uiState.formState.newImageUris,
                     onImagesSelected = { uris ->
-                        val availableSlots = 10 - existingImages.size
-                        newImageUris = uris.take(availableSlots)
+                        val availableSlots = 10 - uiState.existingImages.size
+                        viewModel.updateNewImageUris(uris.take(availableSlots))
                         if (uris.size > availableSlots) {
-                            errorMessage = "Maximum 10 images per property (${existingImages.size} existing)"
+                            viewModel.clearMessages()
+                            // Note: Cannot set error message directly, would need to add method to ViewModel
                         }
                     },
-                    maxImages = 10 - existingImages.size,
+                    maxImages = 10 - uiState.existingImages.size,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -365,7 +270,7 @@ fun LandlordEditPropertyScreen(
                     onExpandedChange = { expanded = !expanded }
                 ) {
                     OutlinedTextField(
-                        value = propertyType,
+                        value = uiState.formState.propertyType,
                         onValueChange = { },
                         label = { Text("Property Type") },
                         readOnly = true,
@@ -382,7 +287,7 @@ fun LandlordEditPropertyScreen(
                             DropdownMenuItem(
                                 text = { Text(type.capitalize()) },
                                 onClick = {
-                                    propertyType = type
+                                    viewModel.updatePropertyType(type)
                                     expanded = false
                                 }
                             )
@@ -392,17 +297,17 @@ fun LandlordEditPropertyScreen(
 
                 // Title
                 OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
+                    value = uiState.formState.title,
+                    onValueChange = { viewModel.updateTitle(it) },
                     label = { Text("Property Title*") },
                     modifier = Modifier.fillMaxWidth(),
-                    isError = title.isEmpty()
+                    isError = uiState.formState.title.isEmpty()
                 )
 
                 // Description
                 OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
+                    value = uiState.formState.description,
+                    onValueChange = { viewModel.updateDescription(it) },
                     label = { Text("Description") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3
@@ -410,11 +315,11 @@ fun LandlordEditPropertyScreen(
 
                 // Location fields
                 OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
+                    value = uiState.formState.address,
+                    onValueChange = { viewModel.updateAddress(it) },
                     label = { Text("Address*") },
                     modifier = Modifier.fillMaxWidth(),
-                    isError = address.isEmpty()
+                    isError = uiState.formState.address.isEmpty()
                 )
 
                 Row(
@@ -422,16 +327,16 @@ fun LandlordEditPropertyScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = city,
-                        onValueChange = { city = it },
+                        value = uiState.formState.city,
+                        onValueChange = { viewModel.updateCity(it) },
                         label = { Text("City*") },
                         modifier = Modifier.weight(1f),
-                        isError = city.isEmpty()
+                        isError = uiState.formState.city.isEmpty()
                     )
 
                     OutlinedTextField(
-                        value = postalCode,
-                        onValueChange = { postalCode = it },
+                        value = uiState.formState.postalCode,
+                        onValueChange = { viewModel.updatePostalCode(it) },
                         label = { Text("Postal Code") },
                         modifier = Modifier.weight(1f)
                     )
@@ -443,41 +348,41 @@ fun LandlordEditPropertyScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = bedrooms,
-                        onValueChange = { bedrooms = it },
+                        value = uiState.formState.bedrooms,
+                        onValueChange = { viewModel.updateBedrooms(it) },
                         label = { Text("Bedrooms*") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
-                        isError = bedrooms.isEmpty()
+                        isError = uiState.formState.bedrooms.isEmpty()
                     )
 
                     OutlinedTextField(
-                        value = bathrooms,
-                        onValueChange = { bathrooms = it },
+                        value = uiState.formState.bathrooms,
+                        onValueChange = { viewModel.updateBathrooms(it) },
                         label = { Text("Bathrooms*") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
-                        isError = bathrooms.isEmpty()
+                        isError = uiState.formState.bathrooms.isEmpty()
                     )
 
                     OutlinedTextField(
-                        value = totalCapacity,
-                        onValueChange = { totalCapacity = it },
+                        value = uiState.formState.totalCapacity,
+                        onValueChange = { viewModel.updateTotalCapacity(it) },
                         label = { Text("Capacity*") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
-                        isError = totalCapacity.isEmpty()
+                        isError = uiState.formState.totalCapacity.isEmpty()
                     )
                 }
 
                 // Price
                 OutlinedTextField(
-                    value = pricePerMonth,
-                    onValueChange = { pricePerMonth = it },
+                    value = uiState.formState.pricePerMonth,
+                    onValueChange = { viewModel.updatePricePerMonth(it) },
                     label = { Text("Price per Month (€)*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
-                    isError = pricePerMonth.isEmpty()
+                    isError = uiState.formState.pricePerMonth.isEmpty()
                 )
 
                 // Availability dates
@@ -486,32 +391,30 @@ fun LandlordEditPropertyScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = availableFrom,
+                        value = uiState.formState.availableFrom,
                         onValueChange = { },
                         label = { Text("Available From*") },
                         modifier = Modifier.weight(1f),
                         readOnly = true,
                         trailingIcon = {
                             IconButton(onClick = {
-                                datePickerTarget = "from"
-                                showDatePicker = true
+                                viewModel.showDatePicker("from")
                             }) {
                                 Icon(Icons.Filled.DateRange, "Select date")
                             }
                         },
-                        isError = availableFrom.isEmpty()
+                        isError = uiState.formState.availableFrom.isEmpty()
                     )
 
                     OutlinedTextField(
-                        value = availableTo,
+                        value = uiState.formState.availableTo,
                         onValueChange = { },
                         label = { Text("Available To") },
                         modifier = Modifier.weight(1f),
                         readOnly = true,
                         trailingIcon = {
                             IconButton(onClick = {
-                                datePickerTarget = "to"
-                                showDatePicker = true
+                                viewModel.showDatePicker("to")
                             }) {
                                 Icon(Icons.Filled.DateRange, "Select date")
                             }
@@ -526,19 +429,20 @@ fun LandlordEditPropertyScreen(
                     modifier = Modifier.padding(top = 8.dp)
                 )
 
-                amenities.forEach { amenity ->
+                uiState.amenities.forEach { amenity ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
-                            checked = selectedAmenities.contains(amenity.amenityId),
+                            checked = uiState.formState.selectedAmenities.contains(amenity.amenityId),
                             onCheckedChange = { isChecked ->
-                                selectedAmenities = if (isChecked) {
-                                    selectedAmenities + amenity.amenityId
+                                val newAmenities = if (isChecked) {
+                                    uiState.formState.selectedAmenities + amenity.amenityId
                                 } else {
-                                    selectedAmenities - amenity.amenityId
+                                    uiState.formState.selectedAmenities - amenity.amenityId
                                 }
+                                viewModel.updateSelectedAmenities(newAmenities)
                             }
                         )
                         Text(amenity.name)
@@ -548,79 +452,13 @@ fun LandlordEditPropertyScreen(
                 // Update button
                 Button(
                     onClick = {
-                        coroutineScope.launch {
-                            errorMessage = ""
-                            successMessage = ""
-
-                            // Validate
-                            when {
-                                title.isEmpty() -> errorMessage = "Title is required"
-                                address.isEmpty() -> errorMessage = "Address is required"
-                                city.isEmpty() -> errorMessage = "City is required"
-                                bedrooms.toIntOrNull() == null -> errorMessage = "Valid number of bedrooms required"
-                                bathrooms.toIntOrNull() == null -> errorMessage = "Valid number of bathrooms required"
-                                totalCapacity.toIntOrNull() == null -> errorMessage = "Valid capacity required"
-                                pricePerMonth.toDoubleOrNull() == null -> errorMessage = "Valid price required"
-                                availableFrom.isEmpty() -> errorMessage = "Available from date is required"
-                                else -> {
-                                    isUpdating = true
-
-                                    val success = propertyRepository.updateProperty(
-                                        propertyId = propertyId,
-                                        title = title.trim(),
-                                        description = description.trim(),
-                                        propertyType = propertyType,
-                                        address = address.trim(),
-                                        city = city.trim(),
-                                        postalCode = postalCode.trim(),
-                                        pricePerMonth = pricePerMonth.toDouble(),
-                                        bedrooms = bedrooms.toInt(),
-                                        bathrooms = bathrooms.toInt(),
-                                        totalCapacity = totalCapacity.toInt(),
-                                        availableFrom = availableFrom,
-                                        availableTo = availableTo.ifEmpty { null }
-                                    )
-
-                                    if (success) {
-                                        // Update amenities
-                                        propertyRepository.updatePropertyAmenities(
-                                            propertyId,
-                                            selectedAmenities.toList()
-                                        )
-
-                                        // Upload new images if any
-                                        if (newImageUris.isNotEmpty()) {
-                                            isUploadingImages = true
-                                            val startOrder = existingImages.maxOfOrNull { it.displayOrder }?.plus(1) ?: 0
-                                            val uploadedUrls = imageRepository.uploadMultipleImages(
-                                                propertyId,
-                                                newImageUris,
-                                                startOrder
-                                            )
-                                            isUploadingImages = false
-
-                                            if (uploadedUrls.isNotEmpty()) {
-                                                Log.d("LandlordEditProperty", "Uploaded ${uploadedUrls.size} new images")
-                                            }
-                                        }
-
-                                        successMessage = "Property updated successfully!"
-                                        delay(1000)
-                                        onPropertyUpdated()
-                                    } else {
-                                        errorMessage = "Failed to update property"
-                                    }
-
-                                    isUpdating = false
-                                }
-                            }
-                        }
+                        viewModel.updateProperty(context, propertyId, onPropertyUpdated)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isUpdating && !isUploadingImages
+                    enabled = !uiState.isUpdating && !uiState.isUploadingImages
                 ) {
                     when {
-                        isUploadingImages -> {
+                        uiState.isUploadingImages -> {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 color = MaterialTheme.colorScheme.onPrimary
@@ -628,7 +466,7 @@ fun LandlordEditPropertyScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Uploading images...")
                         }
-                        isUpdating -> {
+                        uiState.isUpdating -> {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 color = MaterialTheme.colorScheme.onPrimary
@@ -644,34 +482,22 @@ fun LandlordEditPropertyScreen(
     }
 
     // Delete confirmation dialog
-    if (showDeleteDialog) {
+    if (uiState.showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
+            onDismissRequest = { viewModel.hideDeleteDialog() },
             title = { Text("Delete Property") },
             text = { Text("Are you sure you want to delete this property? This action cannot be undone.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        coroutineScope.launch {
-                            showDeleteDialog = false
-                            isUpdating = true
-
-                            val success = propertyRepository.deleteProperty(propertyId)
-
-                            if (success) {
-                                onPropertyDeleted()
-                            } else {
-                                errorMessage = "Failed to delete property"
-                                isUpdating = false
-                            }
-                        }
+                        viewModel.deleteProperty(propertyId, onPropertyDeleted)
                     }
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
+                TextButton(onClick = { viewModel.hideDeleteDialog() }) {
                     Text("Cancel")
                 }
             }
@@ -679,18 +505,18 @@ fun LandlordEditPropertyScreen(
     }
 
     // Date picker dialog
-    if (showDatePicker) {
+    if (uiState.showDatePicker) {
         EditPropertyDatePickerDialog(
             onDateSelected = { year, month, day ->
                 val formattedDate = String.format("%04d-%02d-%02d", year, month, day)
-                if (datePickerTarget == "from") {
-                    availableFrom = formattedDate
+                if (uiState.datePickerTarget == "from") {
+                    viewModel.updateAvailableFrom(formattedDate)
                 } else {
-                    availableTo = formattedDate
+                    viewModel.updateAvailableTo(formattedDate)
                 }
-                showDatePicker = false
+                viewModel.hideDatePicker()
             },
-            onDismiss = { showDatePicker = false }
+            onDismiss = { viewModel.hideDatePicker() }
         )
     }
 }

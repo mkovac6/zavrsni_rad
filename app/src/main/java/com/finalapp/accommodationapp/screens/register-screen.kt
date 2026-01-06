@@ -12,10 +12,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.finalapp.accommodationapp.data.AuthStateManager
 import com.finalapp.accommodationapp.data.repository.UserRepository
-import com.finalapp.accommodationapp.data.UserSession
+import com.finalapp.accommodationapp.ui.viewmodels.auth.RegisterViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,24 +24,41 @@ fun RegisterScreen(
     onNavigateToLogin: () -> Unit,
     onNavigateToUniversitySelection: () -> Unit,
     onNavigateToLandlordProfile: () -> Unit,
-    isAdminCreating: Boolean = false
+    isAdminCreating: Boolean = false,
+    viewModel: RegisterViewModel = viewModel {
+        RegisterViewModel(
+            userRepository = UserRepository(),
+            authStateManager = AuthStateManager()
+        )
+    }
 ) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showSuccessMessage by remember { mutableStateOf(false) }
-    var selectedAccountType by remember { mutableStateOf("student") } // Default to student
-
-    val userRepository = remember { UserRepository() }
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Validation
-    val isEmailValid = email.contains("@") && email.contains(".")
-    val isPasswordValid = password.length >= 6
-    val doPasswordsMatch = password == confirmPassword && password.isNotEmpty()
+    // Validation from ViewModel
+    val isEmailValid = viewModel.isEmailValid
+    val isPasswordValid = viewModel.isPasswordValid
+    val doPasswordsMatch = viewModel.doPasswordsMatch
+
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
+
+    // Handle navigation based on target
+    LaunchedEffect(uiState.navigationTarget) {
+        uiState.navigationTarget?.let { target ->
+            when (target) {
+                "login" -> onNavigateToLogin()
+                "university_selection" -> onNavigateToUniversitySelection()
+                "landlord_profile" -> onNavigateToLandlordProfile()
+            }
+            viewModel.navigationHandled()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -100,8 +118,8 @@ fun RegisterScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             FilterChip(
-                                selected = selectedAccountType == "student",
-                                onClick = { selectedAccountType = "student" },
+                                selected = uiState.selectedAccountType == "student",
+                                onClick = { viewModel.selectAccountType("student") },
                                 label = {
                                     Row(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -119,8 +137,8 @@ fun RegisterScreen(
                             )
 
                             FilterChip(
-                                selected = selectedAccountType == "landlord",
-                                onClick = { selectedAccountType = "landlord" },
+                                selected = uiState.selectedAccountType == "landlord",
+                                onClick = { viewModel.selectAccountType("landlord") },
                                 label = {
                                     Row(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -144,17 +162,14 @@ fun RegisterScreen(
 
                 // Email field
                 OutlinedTextField(
-                    value = email,
-                    onValueChange = {
-                        email = it
-                        errorMessage = null
-                    },
+                    value = uiState.email,
+                    onValueChange = { viewModel.updateEmail(it) },
                     label = { Text("Email") },
                     leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    isError = email.isNotEmpty() && !isEmailValid,
+                    isError = uiState.email.isNotEmpty() && !isEmailValid,
                     supportingText = {
-                        if (email.isNotEmpty() && !isEmailValid) {
+                        if (uiState.email.isNotEmpty() && !isEmailValid) {
                             Text("Please enter a valid email address")
                         }
                     },
@@ -165,18 +180,15 @@ fun RegisterScreen(
 
                 // Password field
                 OutlinedTextField(
-                    value = password,
-                    onValueChange = {
-                        password = it
-                        errorMessage = null
-                    },
+                    value = uiState.password,
+                    onValueChange = { viewModel.updatePassword(it) },
                     label = { Text("Password") },
                     leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    isError = password.isNotEmpty() && !isPasswordValid,
+                    isError = uiState.password.isNotEmpty() && !isPasswordValid,
                     supportingText = {
-                        if (password.isNotEmpty() && !isPasswordValid) {
+                        if (uiState.password.isNotEmpty() && !isPasswordValid) {
                             Text("Password must be at least 6 characters")
                         }
                     },
@@ -187,18 +199,15 @@ fun RegisterScreen(
 
                 // Confirm Password field
                 OutlinedTextField(
-                    value = confirmPassword,
-                    onValueChange = {
-                        confirmPassword = it
-                        errorMessage = null
-                    },
+                    value = uiState.confirmPassword,
+                    onValueChange = { viewModel.updateConfirmPassword(it) },
                     label = { Text("Confirm Password") },
                     leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    isError = confirmPassword.isNotEmpty() && !doPasswordsMatch,
+                    isError = uiState.confirmPassword.isNotEmpty() && !doPasswordsMatch,
                     supportingText = {
-                        if (confirmPassword.isNotEmpty() && !doPasswordsMatch) {
+                        if (uiState.confirmPassword.isNotEmpty() && !doPasswordsMatch) {
                             Text("Passwords do not match")
                         }
                     },
@@ -206,7 +215,7 @@ fun RegisterScreen(
                 )
 
                 // Error message
-                errorMessage?.let {
+                uiState.errorMessage?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -226,44 +235,11 @@ fun RegisterScreen(
 
                 // Register button
                 Button(
-                    onClick = {
-                        scope.launch {
-                            isLoading = true
-                            errorMessage = null
-
-                            val accountType = if (isAdminCreating) "student" else selectedAccountType
-                            val user = userRepository.register(email, password, accountType)
-
-                            if (user != null) {
-                                UserSession.currentUser = user
-                                showSuccessMessage = true
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        "Registration successful! Welcome to Student Accommodation!"
-                                    )
-                                }
-
-                                delay(1500)
-
-                                if (isAdminCreating) {
-                                    onNavigateToLogin() // Go back to admin panel
-                                } else {
-                                    when (accountType) {
-                                        "student" -> onNavigateToUniversitySelection()
-                                        "landlord" -> onNavigateToLandlordProfile()
-                                    }
-                                }
-                            } else {
-                                errorMessage = "Registration failed. Email might already be in use."
-                            }
-
-                            isLoading = false
-                        }
-                    },
+                    onClick = { viewModel.register(isAdminCreating) },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = isEmailValid && isPasswordValid && doPasswordsMatch && !isLoading
+                    enabled = viewModel.isFormValid
                 ) {
-                    if (isLoading) {
+                    if (uiState.isLoading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             color = MaterialTheme.colorScheme.onPrimary
@@ -285,7 +261,7 @@ fun RegisterScreen(
             }
 
             // Success message overlay
-            if (showSuccessMessage) {
+            if (uiState.showSuccessMessage) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()

@@ -13,47 +13,46 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
+import com.finalapp.accommodationapp.ui.viewmodels.landlord.LandlordEditProfileViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandlordEditProfileScreen(
     onNavigateBack: () -> Unit,
-    onProfileUpdated: () -> Unit
+    onProfileUpdated: () -> Unit,
+    viewModel: LandlordEditProfileViewModel = viewModel {
+        LandlordEditProfileViewModel(
+            landlordRepository = LandlordRepository()
+        )
+    }
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val landlordRepository = remember { LandlordRepository() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    
-    // Form states
-    var isLoading by remember { mutableStateOf(true) }
-    var isSaving by remember { mutableStateOf(false) }
-    var landlordId by remember { mutableStateOf(0) }
-    
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var companyName by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    
+
     // Load current profile data
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            isLoading = true
-            
-            val userId = UserSession.currentUser?.userId ?: 0
-            val landlord = landlordRepository.getLandlordByUserId(userId)
-            
-            if (landlord != null) {
-                landlordId = landlord.landlordId
-                firstName = landlord.firstName
-                lastName = landlord.lastName
-                companyName = landlord.companyName ?: ""
-                phone = landlord.phone
-            }
-            
-            isLoading = false
+        val userId = UserSession.currentUser?.userId ?: 0
+        viewModel.loadProfile(userId)
+    }
+
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
+
+    // Handle navigation on profile update
+    LaunchedEffect(uiState.profileUpdated) {
+        if (uiState.profileUpdated) {
+            onProfileUpdated()
+            viewModel.navigationHandled()
         }
     }
     
@@ -70,7 +69,7 @@ fun LandlordEditProfileScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -104,31 +103,31 @@ fun LandlordEditProfileScreen(
                         )
                         
                         OutlinedTextField(
-                            value = firstName,
-                            onValueChange = { firstName = it },
+                            value = uiState.formState.firstName,
+                            onValueChange = { viewModel.updateFirstName(it) },
                             label = { Text("First Name*") },
                             modifier = Modifier.fillMaxWidth(),
-                            isError = firstName.isEmpty(),
-                            enabled = !isSaving
+                            isError = uiState.formState.firstName.isEmpty(),
+                            enabled = !uiState.isSaving
                         )
-                        
+
                         OutlinedTextField(
-                            value = lastName,
-                            onValueChange = { lastName = it },
+                            value = uiState.formState.lastName,
+                            onValueChange = { viewModel.updateLastName(it) },
                             label = { Text("Last Name*") },
                             modifier = Modifier.fillMaxWidth(),
-                            isError = lastName.isEmpty(),
-                            enabled = !isSaving
+                            isError = uiState.formState.lastName.isEmpty(),
+                            enabled = !uiState.isSaving
                         )
-                        
+
                         OutlinedTextField(
-                            value = phone,
-                            onValueChange = { phone = it },
+                            value = uiState.formState.phone,
+                            onValueChange = { viewModel.updatePhone(it) },
                             label = { Text("Phone Number*") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             modifier = Modifier.fillMaxWidth(),
-                            isError = phone.isEmpty(),
-                            enabled = !isSaving
+                            isError = uiState.formState.phone.isEmpty(),
+                            enabled = !uiState.isSaving
                         )
                     }
                 }
@@ -149,11 +148,11 @@ fun LandlordEditProfileScreen(
                         )
                         
                         OutlinedTextField(
-                            value = companyName,
-                            onValueChange = { companyName = it },
+                            value = uiState.formState.companyName,
+                            onValueChange = { viewModel.updateCompanyName(it) },
                             label = { Text("Company Name (Optional)") },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = !isSaving
+                            enabled = !uiState.isSaving
                         )
                         
                         // Info card about verification
@@ -187,47 +186,11 @@ fun LandlordEditProfileScreen(
                 
                 // Save Button
                 Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            // Validate required fields
-                            when {
-                                firstName.isEmpty() -> {
-                                    snackbarHostState.showSnackbar("First name is required")
-                                }
-                                lastName.isEmpty() -> {
-                                    snackbarHostState.showSnackbar("Last name is required")
-                                }
-                                phone.isEmpty() -> {
-                                    snackbarHostState.showSnackbar("Phone number is required")
-                                }
-                                else -> {
-                                    isSaving = true
-                                    
-                                    val success = landlordRepository.updateLandlordProfile(
-                                        landlordId = landlordId,
-                                        firstName = firstName.trim(),
-                                        lastName = lastName.trim(),
-                                        companyName = companyName.trim().ifEmpty { null },
-                                        phone = phone.trim()
-                                    )
-                                    
-                                    if (success) {
-                                        snackbarHostState.showSnackbar("Profile updated successfully")
-                                        kotlinx.coroutines.delay(1000)
-                                        onProfileUpdated()
-                                    } else {
-                                        snackbarHostState.showSnackbar("Failed to update profile")
-                                    }
-                                    
-                                    isSaving = false
-                                }
-                            }
-                        }
-                    },
+                    onClick = { viewModel.saveProfile() },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSaving
+                    enabled = !uiState.isSaving
                 ) {
-                    if (isSaving) {
+                    if (uiState.isSaving) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             color = MaterialTheme.colorScheme.onPrimary
@@ -236,12 +199,12 @@ fun LandlordEditProfileScreen(
                         Text("Save Changes")
                     }
                 }
-                
+
                 // Cancel Button
                 OutlinedButton(
                     onClick = onNavigateBack,
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSaving
+                    enabled = !uiState.isSaving
                 ) {
                     Text("Cancel")
                 }

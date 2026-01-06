@@ -12,54 +12,43 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.data.model.Review
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
 import com.finalapp.accommodationapp.data.repository.student.ReviewRepository
-import kotlinx.coroutines.launch
+import com.finalapp.accommodationapp.ui.viewmodels.landlord.LandlordReviewsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandlordReviewsScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: LandlordReviewsViewModel = viewModel {
+        LandlordReviewsViewModel(
+            reviewRepository = ReviewRepository(),
+            landlordRepository = LandlordRepository()
+        )
+    }
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val reviewRepository = remember { ReviewRepository() }
-    val landlordRepository = remember { LandlordRepository() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-
-    var reviews by remember { mutableStateOf<List<Review>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var landlordId by remember { mutableStateOf<Int?>(null) }
-    var averagePropertyRating by remember { mutableStateOf(0.0) }
-    var averageLandlordRating by remember { mutableStateOf(0.0) }
 
     // Load reviews
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            isLoading = true
-            try {
-                val userId = UserSession.currentUser?.userId
-                if (userId != null) {
-                    val landlordInfo = landlordRepository.getLandlordByUserId(userId)
-                    if (landlordInfo != null) {
-                        landlordId = landlordInfo.landlordId
-                        reviews = reviewRepository.getReviewsForLandlord(landlordInfo.landlordId)
+        val userId = UserSession.currentUser?.userId
+        if (userId != null) {
+            viewModel.loadReviews(userId)
+        }
+    }
 
-                        // Calculate average ratings
-                        if (reviews.isNotEmpty()) {
-                            averagePropertyRating = reviews.map { it.propertyRating }.average()
-                            averageLandlordRating = reviews.map { it.landlordRating }.average()
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                snackbarHostState.showSnackbar("Error loading reviews: ${e.message}")
-            } finally {
-                isLoading = false
-            }
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
         }
     }
 
@@ -76,7 +65,7 @@ fun LandlordReviewsScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -85,7 +74,7 @@ fun LandlordReviewsScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (reviews.isEmpty()) {
+        } else if (uiState.reviews.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -152,7 +141,7 @@ fun LandlordReviewsScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Text(
-                                        text = reviews.size.toString(),
+                                        text = uiState.reviews.size.toString(),
                                         style = MaterialTheme.typography.headlineMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
@@ -168,7 +157,7 @@ fun LandlordReviewsScreen(
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = String.format("%.1f", averagePropertyRating),
+                                            text = String.format("%.1f", uiState.averagePropertyRating),
                                             style = MaterialTheme.typography.headlineMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFFFFD700)
@@ -192,7 +181,7 @@ fun LandlordReviewsScreen(
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = String.format("%.1f", averageLandlordRating),
+                                            text = String.format("%.1f", uiState.averageLandlordRating),
                                             style = MaterialTheme.typography.headlineMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFFFFD700)
@@ -217,7 +206,7 @@ fun LandlordReviewsScreen(
                 }
 
                 // Individual Reviews
-                items(reviews.sortedByDescending { it.createdAt }) { review ->
+                items(uiState.reviews.sortedByDescending { it.createdAt }) { review ->
                     ReviewCard(review = review)
                 }
             }

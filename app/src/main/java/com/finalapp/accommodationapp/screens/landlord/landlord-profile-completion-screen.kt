@@ -11,36 +11,42 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.UserSession
+import com.finalapp.accommodationapp.ui.viewmodels.landlord.LandlordProfileCompletionViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandlordProfileCompletionScreen(
-    onProfileComplete: () -> Unit
+    onProfileComplete: () -> Unit,
+    viewModel: LandlordProfileCompletionViewModel = viewModel {
+        LandlordProfileCompletionViewModel(
+            adminRepository = AdminRepository()
+        )
+    }
 ) {
-    val adminRepository = remember { AdminRepository() }
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    
-    // Get current user from session
-    val userId = UserSession.currentUser?.userId ?: 0
-    
-    // Form states
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var companyName by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    
-    var isLoading by remember { mutableStateOf(false) }
-    var showSuccessMessage by remember { mutableStateOf(false) }
-    
-    // Validation
-    val isFormValid = firstName.isNotBlank() && 
-                     lastName.isNotBlank() && 
-                     phone.isNotBlank()
+
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
+
+    // Handle navigation on profile complete
+    LaunchedEffect(uiState.profileComplete) {
+        if (uiState.profileComplete) {
+            onProfileComplete()
+            viewModel.navigationHandled()
+        }
+    }
     
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -101,33 +107,33 @@ fun LandlordProfileCompletionScreen(
             )
             
             OutlinedTextField(
-                value = firstName,
-                onValueChange = { firstName = it },
+                value = uiState.formState.firstName,
+                onValueChange = { viewModel.updateFirstName(it) },
                 label = { Text("First Name *") },
                 leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth()
             )
-            
+
             OutlinedTextField(
-                value = lastName,
-                onValueChange = { lastName = it },
+                value = uiState.formState.lastName,
+                onValueChange = { viewModel.updateLastName(it) },
                 label = { Text("Last Name *") },
                 leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth()
             )
-            
+
             OutlinedTextField(
-                value = companyName,
-                onValueChange = { companyName = it },
+                value = uiState.formState.companyName,
+                onValueChange = { viewModel.updateCompanyName(it) },
                 label = { Text("Company Name (Optional)") },
                 leadingIcon = { Icon(Icons.Filled.Home, contentDescription = null) },
                 supportingText = { Text("If you represent a property management company") },
                 modifier = Modifier.fillMaxWidth()
             )
-            
+
             OutlinedTextField(
-                value = phone,
-                onValueChange = { phone = it },
+                value = uiState.formState.phone,
+                onValueChange = { viewModel.updatePhone(it) },
                 label = { Text("Phone Number *") },
                 leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
@@ -167,38 +173,13 @@ fun LandlordProfileCompletionScreen(
             // Submit button
             Button(
                 onClick = {
-                    scope.launch {
-                        isLoading = true
-                        
-                        val success = adminRepository.createLandlordProfile(
-                            userId = userId,
-                            firstName = firstName.trim(),
-                            lastName = lastName.trim(),
-                            companyName = companyName.trim().ifEmpty { null },
-                            phone = phone.trim(),
-                            isVerified = false,
-                            rating = 0.0
-                        )
-                        
-                        if (success) {
-                            // Update profile complete status
-                            adminRepository.updateUserProfileStatus(userId, true)
-                            
-                            showSuccessMessage = true
-                            snackbarHostState.showSnackbar("Profile completed successfully!")
-                            delay(1000)
-                            onProfileComplete()
-                        } else {
-                            snackbarHostState.showSnackbar("Failed to complete profile. Please try again.")
-                        }
-                        
-                        isLoading = false
-                    }
+                    val userId = UserSession.currentUser?.userId ?: 0
+                    viewModel.completeProfile(userId)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = isFormValid && !isLoading
+                enabled = viewModel.isFormValid && !uiState.isLoading
             ) {
-                if (isLoading) {
+                if (uiState.isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         color = MaterialTheme.colorScheme.onPrimary
@@ -210,7 +191,7 @@ fun LandlordProfileCompletionScreen(
         }
         
         // Success overlay
-        if (showSuccessMessage) {
+        if (uiState.showSuccessMessage) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

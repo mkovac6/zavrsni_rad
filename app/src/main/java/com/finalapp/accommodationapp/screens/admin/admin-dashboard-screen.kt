@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.finalapp.accommodationapp.ui.viewmodels.admin.AdminDashboardViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -18,7 +20,8 @@ fun AdminDashboardScreen(
     onLandlordsClick: () -> Unit,
     onPropertiesClick: () -> Unit,
     onUniversitiesClick: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    viewModel: AdminDashboardViewModel = viewModel()
 ) {
     Scaffold(
         topBar = {

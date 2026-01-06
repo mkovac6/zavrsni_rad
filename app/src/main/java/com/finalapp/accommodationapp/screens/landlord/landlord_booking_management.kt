@@ -11,11 +11,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.data.model.Booking
 import com.finalapp.accommodationapp.data.repository.student.BookingRepository
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
-import kotlinx.coroutines.launch
+import com.finalapp.accommodationapp.ui.viewmodels.landlord.LandlordBookingManagementViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -24,46 +26,34 @@ import java.util.*
 fun LandlordBookingManagementScreen(
     onNavigateBack: () -> Unit,
     onPropertyClick: (Int) -> Unit,
-    onHomeClick: () -> Unit
+    onHomeClick: () -> Unit,
+    viewModel: LandlordBookingManagementViewModel = viewModel {
+        LandlordBookingManagementViewModel(
+            bookingRepository = BookingRepository(),
+            landlordRepository = LandlordRepository()
+        )
+    }
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val bookingRepository = remember { BookingRepository() }
-    val landlordRepository = remember { LandlordRepository() }
-
-    var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var selectedTab by remember { mutableStateOf(0) }
-    var processingBookingId by remember { mutableStateOf<Int?>(null) }
-    var showSuccessMessage by remember { mutableStateOf("") }
-    var pendingCount by remember { mutableStateOf(0) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val filteredBookings = viewModel.filteredBookings
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // Load bookings
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            isLoading = true
+        val userId = UserSession.currentUser?.userId ?: 0
+        viewModel.loadBookings(userId)
+    }
 
-            // Get landlord ID
-            val userId = UserSession.currentUser?.userId ?: 0
-            val landlordProfile = landlordRepository.getLandlordByUserId(userId)
-
-            if (landlordProfile != null) {
-                bookings = bookingRepository.getLandlordBookings(landlordProfile.landlordId)
-                pendingCount = bookings.count { it.status == "pending" }
-            }
-
-            isLoading = false
+    // Handle success messages
+    LaunchedEffect(uiState.showSuccessMessage) {
+        if (uiState.showSuccessMessage.isNotEmpty()) {
+            snackbarHostState.showSnackbar(uiState.showSuccessMessage)
+            viewModel.clearSuccessMessage()
         }
     }
 
-    // Filter bookings by status
-    val filteredBookings = when (selectedTab) {
-        0 -> bookings.filter { it.status == "pending" } // Pending
-        1 -> bookings.filter { it.status == "approved" } // Approved
-        2 -> bookings.filter { it.status in listOf("rejected", "cancelled", "completed") } // History
-        else -> bookings
-    }
-
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Booking Requests") }
@@ -81,10 +71,10 @@ fun LandlordBookingManagementScreen(
                     icon = {
                         BadgedBox(
                             badge = {
-                                if (pendingCount > 0) {
+                                if (uiState.pendingCount > 0) {
                                     Badge {
                                         Text(
-                                            text = pendingCount.toString(),
+                                            text = uiState.pendingCount.toString(),
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                     }
@@ -99,19 +89,6 @@ fun LandlordBookingManagementScreen(
                     onClick = { }
                 )
             }
-        },
-        snackbarHost = {
-            if (showSuccessMessage.isNotEmpty()) {
-                Snackbar(
-                    action = {
-                        TextButton(onClick = { showSuccessMessage = "" }) {
-                            Text("Dismiss")
-                        }
-                    }
-                ) {
-                    Text(showSuccessMessage)
-                }
-            }
         }
     ) { paddingValues ->
         Column(
@@ -120,33 +97,33 @@ fun LandlordBookingManagementScreen(
                 .padding(paddingValues)
         ) {
             // Tab Row
-            TabRow(selectedTabIndex = selectedTab) {
+            TabRow(selectedTabIndex = uiState.selectedTab) {
                 Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
+                    selected = uiState.selectedTab == 0,
+                    onClick = { viewModel.selectTab(0) },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Pending")
-                            if (pendingCount > 0) {
+                            if (uiState.pendingCount > 0) {
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Badge { Text(pendingCount.toString()) }
+                                Badge { Text(uiState.pendingCount.toString()) }
                             }
                         }
                     }
                 )
                 Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
+                    selected = uiState.selectedTab == 1,
+                    onClick = { viewModel.selectTab(1) },
                     text = { Text("Approved") }
                 )
                 Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
+                    selected = uiState.selectedTab == 2,
+                    onClick = { viewModel.selectTab(2) },
                     text = { Text("History") }
                 )
             }
 
-            if (isLoading) {
+            if (uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -170,7 +147,7 @@ fun LandlordBookingManagementScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = when (selectedTab) {
+                            text = when (uiState.selectedTab) {
                                 0 -> "No pending booking requests"
                                 1 -> "No approved bookings"
                                 else -> "No booking history"
@@ -192,43 +169,17 @@ fun LandlordBookingManagementScreen(
                             onPropertyClick = { onPropertyClick(booking.propertyId) },
                             onApprove = if (booking.status == "pending") {
                                 {
-                                    coroutineScope.launch {
-                                        processingBookingId = booking.bookingId
-                                        val success = bookingRepository.updateBookingStatus(booking.bookingId, "approved")
-                                        if (success) {
-                                            showSuccessMessage = "Booking approved successfully"
-                                            // Reload bookings
-                                            val userId = UserSession.currentUser?.userId ?: 0
-                                            val landlordProfile = landlordRepository.getLandlordByUserId(userId)
-                                            if (landlordProfile != null) {
-                                                bookings = bookingRepository.getLandlordBookings(landlordProfile.landlordId)
-                                                pendingCount = bookings.count { it.status == "pending" }
-                                            }
-                                        }
-                                        processingBookingId = null
-                                    }
+                                    val userId = UserSession.currentUser?.userId ?: 0
+                                    viewModel.approveBooking(booking.bookingId, userId)
                                 }
                             } else null,
                             onReject = if (booking.status == "pending") {
                                 {
-                                    coroutineScope.launch {
-                                        processingBookingId = booking.bookingId
-                                        val success = bookingRepository.updateBookingStatus(booking.bookingId, "rejected")
-                                        if (success) {
-                                            showSuccessMessage = "Booking rejected"
-                                            // Reload bookings
-                                            val userId = UserSession.currentUser?.userId ?: 0
-                                            val landlordProfile = landlordRepository.getLandlordByUserId(userId)
-                                            if (landlordProfile != null) {
-                                                bookings = bookingRepository.getLandlordBookings(landlordProfile.landlordId)
-                                                pendingCount = bookings.count { it.status == "pending" }
-                                            }
-                                        }
-                                        processingBookingId = null
-                                    }
+                                    val userId = UserSession.currentUser?.userId ?: 0
+                                    viewModel.rejectBooking(booking.bookingId, userId)
                                 }
                             } else null,
-                            isProcessing = processingBookingId == booking.bookingId
+                            isProcessing = uiState.processingBookingId == booking.bookingId
                         )
                     }
                 }

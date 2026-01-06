@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
@@ -23,6 +25,7 @@ import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.screens.components.BookingDialog
 import com.finalapp.accommodationapp.screens.components.PropertyImageCarousel
+import com.finalapp.accommodationapp.ui.viewmodels.student.PropertyDetailViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.Date
@@ -34,81 +37,43 @@ fun PropertyDetailScreen(
     onNavigateBack: () -> Unit,
     onBookingClick: () -> Unit,
     onEditClick: ((Int) -> Unit)? = null,
-    onViewLocationClick: ((Property) -> Unit)? = null
+    onViewLocationClick: ((Property) -> Unit)? = null,
+    viewModel: PropertyDetailViewModel = viewModel {
+        PropertyDetailViewModel(
+            propertyRepository = PropertyRepository(),
+            landlordRepository = LandlordRepository(),
+            favoritesRepository = FavoritesRepository(),
+            bookingRepository = BookingRepository(),
+            studentRepository = StudentRepository()
+        )
+    }
 ) {
-    val propertyRepository = remember { PropertyRepository() }
-    val landlordRepository = remember { LandlordRepository() }
-    val favoritesRepository = remember { FavoritesRepository() }
-    val bookingRepository = remember { BookingRepository() }
-    val studentRepository = remember { StudentRepository() }
-
-    var property by remember { mutableStateOf<Property?>(null) }
-    var amenities by remember { mutableStateOf<List<String>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var isLandlordOwner by remember { mutableStateOf(false) }
-    var isFavorite by remember { mutableStateOf(false) }
-    var studentId by remember { mutableStateOf(0) }
-    var showBookingDialog by remember { mutableStateOf(false) }
-    var isProcessingBooking by remember { mutableStateOf(false) }
-
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Load property details and check ownership/favorites
     LaunchedEffect(propertyId) {
-        scope.launch {
-            isLoading = true
-            errorMessage = null
+        val currentUser = UserSession.currentUser
+        viewModel.loadPropertyDetails(
+            propertyId = propertyId,
+            userId = currentUser?.userId,
+            userType = currentUser?.userType
+        )
+    }
 
-            try {
-                // Load property details
-                val loadedProperty = propertyRepository.getPropertyById(propertyId)
-                if (loadedProperty != null) {
-                    property = loadedProperty
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
 
-                    // Load amenities
-                    amenities = propertyRepository.getPropertyAmenitiesAsStrings(propertyId)
-
-                    // Check if current user is the landlord owner
-                    val currentUser = UserSession.currentUser
-                    if (currentUser?.userType == "landlord") {
-                        try {
-                            val landlord = landlordRepository.getLandlordByUserId(currentUser.userId)
-                            if (landlord != null) {
-                                // Get the property's landlord ID
-                                val propertyLandlordId = propertyRepository.getLandlordIdByPropertyId(propertyId)
-                                isLandlordOwner = landlord.landlordId == propertyLandlordId
-                            }
-                        } catch (e: Exception) {
-                            Log.e("PropertyDetail", "Error checking landlord ownership: ${e.message}")
-                        }
-                    } else if (currentUser?.userType == "student") {
-                        Log.d("PropertyDetail", "Current user is student with userId: ${currentUser.userId}")
-
-                        // Get student profile
-                        try {
-                            val student = studentRepository.getStudentProfile(currentUser.userId)
-                            if (student != null) {
-                                studentId = student.studentId
-                                Log.d("PropertyDetail", "Found student profile with studentId: $studentId")
-                                isFavorite = favoritesRepository.isFavorite(student.studentId, propertyId)
-                            } else {
-                                Log.e("PropertyDetail", "No student profile found for userId: ${currentUser.userId}")
-                            }
-                        } catch (e: Exception) {
-                            Log.e("PropertyDetail", "Error loading student profile: ${e.message}")
-                        }
-                    }
-                } else {
-                    errorMessage = "Property not found"
-                }
-            } catch (e: Exception) {
-                Log.e("PropertyDetail", "Error loading property: ${e.message}", e)
-                errorMessage = "Error loading property: ${e.message}"
-            } finally {
-                isLoading = false
-            }
+    // Handle navigation on booking success
+    LaunchedEffect(uiState.bookingSuccess) {
+        if (uiState.bookingSuccess) {
+            onBookingClick()
+            viewModel.bookingNavigationHandled()
         }
     }
 
@@ -124,7 +89,7 @@ fun PropertyDetailScreen(
                 },
                 actions = {
                     // Show edit button if user is the landlord owner
-                    if (isLandlordOwner && onEditClick != null) {
+                    if (uiState.isLandlordOwner && onEditClick != null) {
                         IconButton(onClick = { onEditClick(propertyId) }) {
                             Icon(
                                 Icons.Filled.Edit,
@@ -135,34 +100,14 @@ fun PropertyDetailScreen(
                     }
 
                     // Show favorite button for students
-                    if (UserSession.currentUser?.userType == "student" && studentId > 0) {
+                    if (UserSession.currentUser?.userType == "student" && uiState.studentId > 0) {
                         IconButton(
-                            onClick = {
-                                scope.launch {
-                                    try {
-                                        if (isFavorite) {
-                                            val removed = favoritesRepository.removeFromFavorites(studentId, propertyId)
-                                            if (removed) {
-                                                isFavorite = false
-                                                snackbarHostState.showSnackbar("Removed from favorites")
-                                            }
-                                        } else {
-                                            val added = favoritesRepository.addToFavorites(studentId, propertyId)
-                                            if (added) {
-                                                isFavorite = true
-                                                snackbarHostState.showSnackbar("Added to favorites")
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        snackbarHostState.showSnackbar("Error updating favorites")
-                                    }
-                                }
-                            }
+                            onClick = { viewModel.toggleFavorite(propertyId) }
                         ) {
                             Icon(
-                                if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                                tint = if (isFavorite) Color.Red else MaterialTheme.colorScheme.onSurface
+                                if (uiState.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                contentDescription = if (uiState.isFavorite) "Remove from favorites" else "Add to favorites",
+                                tint = if (uiState.isFavorite) Color.Red else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -171,7 +116,7 @@ fun PropertyDetailScreen(
         },
         bottomBar = {
             // Only show booking button for students who are NOT the landlord
-            if (UserSession.currentUser?.userType == "student" && !isLandlordOwner && property != null && studentId > 0) {
+            if (UserSession.currentUser?.userType == "student" && !uiState.isLandlordOwner && uiState.property != null && uiState.studentId > 0) {
                 Surface(
                     shadowElevation = 8.dp,
                     tonalElevation = 3.dp
@@ -185,7 +130,7 @@ fun PropertyDetailScreen(
                     ) {
                         Column {
                             Text(
-                                text = "€${property!!.pricePerMonth.toInt()}/month",
+                                text = "€${uiState.property!!.pricePerMonth.toInt()}/month",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -197,10 +142,10 @@ fun PropertyDetailScreen(
                             )
                         }
                         Button(
-                            onClick = { showBookingDialog = true },
-                            enabled = !isProcessingBooking
+                            onClick = { viewModel.showBookingDialog() },
+                            enabled = !uiState.isProcessingBooking
                         ) {
-                            if (isProcessingBooking) {
+                            if (uiState.isProcessingBooking) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
                                     color = MaterialTheme.colorScheme.onPrimary
@@ -215,7 +160,7 @@ fun PropertyDetailScreen(
         }
     ) { paddingValues ->
         when {
-            isLoading -> {
+            uiState.isLoading -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -225,7 +170,7 @@ fun PropertyDetailScreen(
                     CircularProgressIndicator()
                 }
             }
-            errorMessage != null -> {
+            uiState.errorMessage != null -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -244,7 +189,7 @@ fun PropertyDetailScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = errorMessage ?: "Unknown error",
+                            text = uiState.errorMessage ?: "Unknown error",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.error,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -257,7 +202,7 @@ fun PropertyDetailScreen(
                     }
                 }
             }
-            property != null -> {
+            uiState.property != null -> {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -268,7 +213,7 @@ fun PropertyDetailScreen(
                     // Property Image Carousel
                     item {
                         PropertyImageCarousel(
-                            imageUrls = property!!.imageUrls,
+                            imageUrls = uiState.property!!.imageUrls,
                             modifier = Modifier.fillMaxWidth(),
                             height = 300
                         )
@@ -284,7 +229,7 @@ fun PropertyDetailScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = property!!.title,
+                                        text = uiState.property!!.title,
                                         style = MaterialTheme.typography.headlineMedium,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -292,7 +237,7 @@ fun PropertyDetailScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         AssistChip(
                                             onClick = { },
-                                            label = { Text(property!!.propertyType.replaceFirstChar { it.uppercase() }) },
+                                            label = { Text(uiState.property!!.propertyType.replaceFirstChar { it.uppercase() }) },
                                             leadingIcon = {
                                                 Icon(
                                                     Icons.Filled.Home,
@@ -302,14 +247,14 @@ fun PropertyDetailScreen(
                                             }
                                         )
                                         // Show active/inactive status for landlords
-                                        if (isLandlordOwner) {
+                                        if (uiState.isLandlordOwner) {
                                             AssistChip(
                                                 onClick = { },
                                                 label = {
-                                                    Text(if (property!!.isActive) "Active" else "Inactive")
+                                                    Text(if (uiState.property!!.isActive) "Active" else "Inactive")
                                                 },
                                                 colors = AssistChipDefaults.assistChipColors(
-                                                    containerColor = if (property!!.isActive)
+                                                    containerColor = if (uiState.property!!.isActive)
                                                         Color(0xFF4CAF50).copy(alpha = 0.2f)
                                                     else
                                                         Color(0xFFFF5252).copy(alpha = 0.2f)
@@ -349,12 +294,12 @@ fun PropertyDetailScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column {
                                         Text(
-                                            text = property!!.address,
+                                            text = uiState.property!!.address,
                                             style = MaterialTheme.typography.bodyLarge,
                                             fontWeight = FontWeight.Medium
                                         )
                                         Text(
-                                            text = "${property!!.city} ${property!!.postalCode}",
+                                            text = "${uiState.property!!.city} ${uiState.property!!.postalCode}",
                                             style = MaterialTheme.typography.bodyMedium
                                         )
                                     }
@@ -362,7 +307,7 @@ fun PropertyDetailScreen(
                                 // View on Map button
                                 if (onViewLocationClick != null) {
                                     FilledTonalIconButton(
-                                        onClick = { onViewLocationClick(property!!) }
+                                        onClick = { onViewLocationClick(uiState.property!!) }
                                     ) {
                                         Icon(
                                             Icons.Filled.Map,
@@ -393,22 +338,22 @@ fun PropertyDetailScreen(
                             ) {
                                 FeatureChip(
                                     icon = Icons.Filled.Bed,
-                                    label = "${property!!.bedrooms} Beds"
+                                    label = "${uiState.property!!.bedrooms} Beds"
                                 )
                                 FeatureChip(
                                     icon = Icons.Filled.Bathroom,
-                                    label = "${property!!.bathrooms} Bathrooms"
+                                    label = "${uiState.property!!.bathrooms} Bathrooms"
                                 )
                                 FeatureChip(
                                     icon = Icons.Filled.Person,
-                                    label = "${property!!.totalCapacity} People"
+                                    label = "${uiState.property!!.totalCapacity} People"
                                 )
                             }
                         }
                     }
 
                     // Description
-                    if (property!!.description.isNotEmpty()) {
+                    if (uiState.property!!.description.isNotEmpty()) {
                         item {
                             Text(
                                 text = "Description",
@@ -420,7 +365,7 @@ fun PropertyDetailScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = property!!.description,
+                                    text = uiState.property!!.description,
                                     style = MaterialTheme.typography.bodyMedium,
                                     modifier = Modifier.padding(16.dp)
                                 )
@@ -429,7 +374,7 @@ fun PropertyDetailScreen(
                     }
 
                     // Amenities
-                    if (amenities.isNotEmpty()) {
+                    if (uiState.amenities.isNotEmpty()) {
                         item {
                             Text(
                                 text = "Amenities",
@@ -444,7 +389,7 @@ fun PropertyDetailScreen(
                                     modifier = Modifier.padding(16.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    amenities.forEach { amenity ->
+                                    uiState.amenities.forEach { amenity ->
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
@@ -481,7 +426,7 @@ fun PropertyDetailScreen(
                                 modifier = Modifier.padding(16.dp)
                             ) {
                                 val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                                property!!.availableFrom?.let { date ->
+                                uiState.property!!.availableFrom?.let { date ->
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             Icons.Filled.CheckCircle,
@@ -505,7 +450,7 @@ fun PropertyDetailScreen(
                                         }
                                     }
                                 }
-                                property!!.availableTo?.let { date ->
+                                uiState.property!!.availableTo?.let { date ->
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
@@ -561,7 +506,7 @@ fun PropertyDetailScreen(
                                         style = MaterialTheme.typography.bodyLarge
                                     )
                                     Text(
-                                        text = "€${property!!.pricePerMonth.toInt()}",
+                                        text = "€${uiState.property!!.pricePerMonth.toInt()}",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
@@ -576,47 +521,21 @@ fun PropertyDetailScreen(
     }
 
     // Booking Dialog
-    if (showBookingDialog && property != null && studentId > 0) {
+    if (uiState.showBookingDialog && uiState.property != null && uiState.studentId > 0) {
         BookingDialog(
             propertyId = propertyId,
-            pricePerMonth = property!!.pricePerMonth,
-            availableFrom = property!!.availableFrom,
-            availableTo = property!!.availableTo,
-            onDismiss = { showBookingDialog = false },
+            pricePerMonth = uiState.property!!.pricePerMonth,
+            availableFrom = uiState.property!!.availableFrom,
+            availableTo = uiState.property!!.availableTo,
+            onDismiss = { viewModel.hideBookingDialog() },
             onConfirm = { startDate, endDate, totalPrice, message ->
-                scope.launch {
-                    isProcessingBooking = true
-                    showBookingDialog = false
-
-                    try {
-                        // Check availability first
-                        val isAvailable = bookingRepository.checkDateAvailability(propertyId, startDate, endDate)
-
-                        if (isAvailable) {
-                            // Create booking with the studentId
-                            val success = bookingRepository.createBooking(
-                                propertyId = propertyId,
-                                studentId = studentId,
-                                startDate = startDate,
-                                endDate = endDate,
-                                totalPrice = totalPrice,
-                                messageToLandlord = message
-                            )
-
-                            if (success) {
-                                snackbarHostState.showSnackbar("Booking request sent successfully!")
-                            } else {
-                                snackbarHostState.showSnackbar("Failed to send booking request")
-                            }
-                        } else {
-                            snackbarHostState.showSnackbar("Selected dates are not available")
-                        }
-                    } catch (e: Exception) {
-                        snackbarHostState.showSnackbar("Error creating booking: ${e.message}")
-                    } finally {
-                        isProcessingBooking = false
-                    }
-                }
+                viewModel.createBooking(
+                    propertyId = propertyId,
+                    startDate = startDate,
+                    endDate = endDate,
+                    totalPrice = totalPrice,
+                    messageToLandlord = message
+                )
             }
         )
     }

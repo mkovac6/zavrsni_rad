@@ -12,10 +12,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.repository.student.FavoritesRepository
 import com.finalapp.accommodationapp.data.repository.student.StudentRepository
+import com.finalapp.accommodationapp.ui.viewmodels.student.FavoritesViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -26,46 +29,40 @@ fun StudentFavoritesScreen(
     onNavigateBack: () -> Unit,
     onPropertyClick: (Int) -> Unit,
     onHomeClick: () -> Unit,
-    onBookingsClick: () -> Unit
-) {
-    val coroutineScope = rememberCoroutineScope()
-    val favoritesRepository = remember { FavoritesRepository() }
-    val studentRepository = remember { StudentRepository() }
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    var favoriteProperties by remember { mutableStateOf<List<Property>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var studentId by remember { mutableStateOf(0) }
-    var isRefreshing by remember { mutableStateOf(false) }
-
-    // Function to load favorites
-    fun loadFavorites() {
-        coroutineScope.launch {
-            try {
-                isRefreshing = true
-                // Get student ID
-                val userId = UserSession.currentUser?.userId ?: 0
-                val studentProfile = studentRepository.getStudentProfile(userId)
-
-                if (studentProfile != null) {
-                    studentId = studentProfile.studentId
-                    favoriteProperties = favoritesRepository.getStudentFavorites(studentProfile.studentId)
-                } else {
-                    snackbarHostState.showSnackbar("Unable to load student profile")
-                }
-            } catch (e: Exception) {
-                snackbarHostState.showSnackbar("Error loading favorites: ${e.message}")
-            } finally {
-                isLoading = false
-                isRefreshing = false
-            }
-        }
+    onBookingsClick: () -> Unit,
+    viewModel: FavoritesViewModel = viewModel {
+        FavoritesViewModel(
+            favoritesRepository = FavoritesRepository(),
+            studentRepository = StudentRepository()
+        )
     }
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Track last removed property ID for undo
+    var lastRemovedPropertyId by remember { mutableStateOf<Int?>(null) }
 
     // Load favorite properties
     LaunchedEffect(Unit) {
-        isLoading = true
-        loadFavorites()
+        val userId = UserSession.currentUser?.userId ?: 0
+        viewModel.loadFavorites(userId)
+    }
+
+    // Handle snackbar messages with undo action
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            val result = snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = if (uiState.showUndoAction) "Undo" else null,
+                duration = if (uiState.showUndoAction) SnackbarDuration.Short else SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed && lastRemovedPropertyId != null) {
+                viewModel.undoRemoveFavorite(lastRemovedPropertyId!!)
+            }
+            viewModel.snackbarShown()
+        }
     }
 
     Scaffold(
@@ -75,10 +72,10 @@ fun StudentFavoritesScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("My Favorites")
-                        if (favoriteProperties.isNotEmpty()) {
+                        if (uiState.favoriteProperties.isNotEmpty()) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Badge {
-                                Text(favoriteProperties.size.toString())
+                                Text(uiState.favoriteProperties.size.toString())
                             }
                         }
                     }
@@ -89,12 +86,15 @@ fun StudentFavoritesScreen(
                     }
                 },
                 actions = {
-                    if (favoriteProperties.isNotEmpty()) {
+                    if (uiState.favoriteProperties.isNotEmpty()) {
                         IconButton(
-                            onClick = { loadFavorites() },
-                            enabled = !isRefreshing
+                            onClick = {
+                                val userId = UserSession.currentUser?.userId ?: 0
+                                viewModel.loadFavorites(userId)
+                            },
+                            enabled = !uiState.isRefreshing
                         ) {
-                            if (isRefreshing) {
+                            if (uiState.isRefreshing) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(24.dp),
                                     strokeWidth = 2.dp
@@ -125,8 +125,8 @@ fun StudentFavoritesScreen(
                     icon = {
                         BadgedBox(
                             badge = {
-                                if (favoriteProperties.isNotEmpty()) {
-                                    Badge { Text(favoriteProperties.size.toString()) }
+                                if (uiState.favoriteProperties.isNotEmpty()) {
+                                    Badge { Text(uiState.favoriteProperties.size.toString()) }
                                 }
                             }
                         ) {
@@ -141,7 +141,7 @@ fun StudentFavoritesScreen(
         }
     ) { paddingValues ->
         when {
-            isLoading -> {
+            uiState.isLoading -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -151,7 +151,7 @@ fun StudentFavoritesScreen(
                     CircularProgressIndicator()
                 }
             }
-            favoriteProperties.isEmpty() -> {
+            uiState.favoriteProperties.isEmpty() -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -200,42 +200,15 @@ fun StudentFavoritesScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(
-                        items = favoriteProperties,
+                        items = uiState.favoriteProperties,
                         key = { it.propertyId }
                     ) { property ->
                         FavoritePropertyCard(
                             property = property,
                             onClick = { onPropertyClick(property.propertyId) },
                             onRemoveFavorite = {
-                                coroutineScope.launch {
-                                    val removed = favoritesRepository.removeFromFavorites(
-                                        studentId,
-                                        property.propertyId
-                                    )
-                                    if (removed) {
-                                        favoriteProperties = favoriteProperties.filter {
-                                            it.propertyId != property.propertyId
-                                        }
-                                        snackbarHostState.showSnackbar(
-                                            message = "Removed from favorites",
-                                            actionLabel = "Undo",
-                                            duration = SnackbarDuration.Short
-                                        ).let { result ->
-                                            if (result == SnackbarResult.ActionPerformed) {
-                                                // Undo the removal
-                                                val added = favoritesRepository.addToFavorites(
-                                                    studentId,
-                                                    property.propertyId
-                                                )
-                                                if (added) {
-                                                    loadFavorites() // Reload to get the property back
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        snackbarHostState.showSnackbar("Failed to remove from favorites")
-                                    }
-                                }
+                                lastRemovedPropertyId = property.propertyId
+                                viewModel.removeFromFavorites(property.propertyId)
                             }
                         )
                     }

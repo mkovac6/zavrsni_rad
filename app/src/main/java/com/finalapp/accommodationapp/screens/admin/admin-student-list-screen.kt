@@ -11,30 +11,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.repository.admin.AdminRepository
 import com.finalapp.accommodationapp.data.model.admin.StudentWithUser
+import com.finalapp.accommodationapp.ui.viewmodels.admin.AdminStudentListViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminStudentListScreen(
     onNavigateBack: () -> Unit,
-    onAddStudent: () -> Unit
+    onAddStudent: () -> Unit,
+    viewModel: AdminStudentListViewModel = viewModel {
+        AdminStudentListViewModel(
+            adminRepository = AdminRepository()
+        )
+    }
 ) {
-    val adminRepository = remember { AdminRepository() }
-    var students by remember { mutableStateOf<List<StudentWithUser>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var studentToDelete by remember { mutableStateOf<StudentWithUser?>(null) }
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load students
+    // Load uiState.students
     LaunchedEffect(Unit) {
-        scope.launch {
-            isLoading = true
-            students = adminRepository.getAllStudents()
-            isLoading = false
+        viewModel.loadStudents()
+    }
+
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
         }
     }
 
@@ -56,7 +62,7 @@ fun AdminStudentListScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -65,7 +71,7 @@ fun AdminStudentListScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (students.isEmpty()) {
+        } else if (uiState.students.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -116,7 +122,7 @@ fun AdminStudentListScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "Total Students: ${students.size}",
+                                "Total Students: ${uiState.students.size}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -124,12 +130,11 @@ fun AdminStudentListScreen(
                     }
                 }
 
-                items(students) { student ->
+                items(uiState.students) { student ->
                     StudentCard(
                         student = student,
                         onDelete = {
-                            studentToDelete = student
-                            showDeleteDialog = true
+                            viewModel.showDeleteDialog(student)
                         }
                     )
                 }
@@ -138,33 +143,19 @@ fun AdminStudentListScreen(
     }
 
     // Delete confirmation dialog
-    if (showDeleteDialog) {
+    if (uiState.showDeleteDialog) {
         AlertDialog(
             onDismissRequest = {
-                showDeleteDialog = false
-                studentToDelete = null
+                viewModel.hideDeleteDialog()
             },
             title = { Text("Delete Student") },
             text = {
-                Text("Are you sure you want to delete ${studentToDelete?.firstName} ${studentToDelete?.lastName}? This will also delete their user account.")
+                Text("Are you sure you want to delete ${uiState.studentToDelete?.firstName} ${uiState.studentToDelete?.lastName}? This will also delete their user account.")
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        studentToDelete?.let { student ->
-                            scope.launch {
-                                showDeleteDialog = false
-                                studentToDelete = null
-
-                                val success = adminRepository.deleteStudent(student.userId)
-                                if (success) {
-                                    students = adminRepository.getAllStudents()
-                                    snackbarHostState.showSnackbar("Student deleted successfully")
-                                } else {
-                                    snackbarHostState.showSnackbar("Failed to delete student")
-                                }
-                            }
-                        }
+                        viewModel.deleteStudent()
                     }
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -173,8 +164,7 @@ fun AdminStudentListScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        showDeleteDialog = false
-                        studentToDelete = null
+                        viewModel.hideDeleteDialog()
                     }
                 ) {
                     Text("Cancel")

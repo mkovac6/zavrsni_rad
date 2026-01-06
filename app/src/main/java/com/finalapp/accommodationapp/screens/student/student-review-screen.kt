@@ -13,12 +13,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.data.model.Booking
 import com.finalapp.accommodationapp.data.repository.student.BookingRepository
 import com.finalapp.accommodationapp.data.repository.student.ReviewRepository
 import com.finalapp.accommodationapp.data.repository.student.StudentRepository
-import kotlinx.coroutines.launch
+import com.finalapp.accommodationapp.ui.viewmodels.student.StudentReviewViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -26,48 +28,37 @@ import java.util.*
 @Composable
 fun StudentReviewScreen(
     bookingId: Int,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: StudentReviewViewModel = viewModel {
+        StudentReviewViewModel(
+            reviewRepository = ReviewRepository(),
+            bookingRepository = BookingRepository(),
+            studentRepository = StudentRepository()
+        )
+    }
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val reviewRepository = remember { ReviewRepository() }
-    val bookingRepository = remember { BookingRepository() }
-    val studentRepository = remember { StudentRepository() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var booking by remember { mutableStateOf<Booking?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    var isSubmitting by remember { mutableStateOf(false) }
-    var propertyRating by remember { mutableIntStateOf(0) }
-    var landlordRating by remember { mutableIntStateOf(0) }
-    var comment by remember { mutableStateOf("") }
-    var studentId by remember { mutableIntStateOf(0) }
-
-    // Load booking details
+    // Load uiState.booking details
     LaunchedEffect(bookingId) {
-        coroutineScope.launch {
-            isLoading = true
-            try {
-                val userId = UserSession.currentUser?.userId ?: 0
-                val studentProfile = studentRepository.getStudentProfile(userId)
+        val userId = UserSession.currentUser?.userId ?: 0
+        viewModel.loadBooking(bookingId, userId)
+    }
 
-                if (studentProfile != null) {
-                    studentId = studentProfile.studentId
-                    val bookings = bookingRepository.getStudentBookings(studentProfile.studentId)
-                    booking = bookings.find { it.bookingId == bookingId }
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
 
-                    if (booking == null) {
-                        snackbarHostState.showSnackbar("Booking not found")
-                    } else if (booking?.status?.lowercase() != "completed") {
-                        snackbarHostState.showSnackbar("Can only review completed bookings")
-                    }
-                } else {
-                    snackbarHostState.showSnackbar("Unable to load student profile")
-                }
-            } catch (e: Exception) {
-                snackbarHostState.showSnackbar("Error loading booking: ${e.message}")
-            } finally {
-                isLoading = false
-            }
+    // Handle navigation after successful review submission
+    LaunchedEffect(uiState.reviewSubmitted) {
+        if (uiState.reviewSubmitted) {
+            onNavigateBack()
+            viewModel.navigationHandled()
         }
     }
 
@@ -84,7 +75,7 @@ fun StudentReviewScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -93,7 +84,7 @@ fun StudentReviewScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (booking == null) {
+        } else if (uiState.booking == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -135,13 +126,13 @@ fun StudentReviewScreen(
                         modifier = Modifier.padding(16.dp)
                     ) {
                         Text(
-                            text = booking?.propertyTitle ?: "Property #${booking?.propertyId}",
+                            text = uiState.booking?.propertyTitle ?: "Property #${uiState.booking?.propertyId}",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        if (!booking?.propertyAddress.isNullOrEmpty()) {
+                        if (!uiState.booking?.propertyAddress.isNullOrEmpty()) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -153,7 +144,7 @@ fun StudentReviewScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = booking?.propertyAddress ?: "",
+                                    text = uiState.booking?.propertyAddress ?: "",
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             }
@@ -163,7 +154,7 @@ fun StudentReviewScreen(
 
                         // Dates
                         val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                        if (booking?.startDate != null && booking?.endDate != null) {
+                        if (uiState.booking?.startDate != null && uiState.booking?.endDate != null) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -175,7 +166,7 @@ fun StudentReviewScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "${dateFormat.format(booking?.startDate)} - ${dateFormat.format(booking?.endDate)}",
+                                    text = "${dateFormat.format(uiState.booking?.startDate)} - ${dateFormat.format(uiState.booking?.endDate)}",
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             }
@@ -200,8 +191,8 @@ fun StudentReviewScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 StarRatingSelector(
-                    rating = propertyRating,
-                    onRatingChange = { propertyRating = it }
+                    rating = uiState.propertyRating,
+                    onRatingChange = { viewModel.updatePropertyRating(it) }
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -221,8 +212,8 @@ fun StudentReviewScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 StarRatingSelector(
-                    rating = landlordRating,
-                    onRatingChange = { landlordRating = it }
+                    rating = uiState.landlordRating,
+                    onRatingChange = { viewModel.updateLandlordRating(it) }
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -242,8 +233,8 @@ fun StudentReviewScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(
-                    value = comment,
-                    onValueChange = { comment = it },
+                    value = uiState.comment,
+                    onValueChange = { viewModel.updateComment(it) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(150.dp),
@@ -256,60 +247,19 @@ fun StudentReviewScreen(
                 // Submit Button
                 Button(
                     onClick = {
-                        if (propertyRating == 0 || landlordRating == 0) {
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Please provide both property and landlord ratings")
-                            }
-                            return@Button
-                        }
-
-                        coroutineScope.launch {
-                            isSubmitting = true
-                            try {
-                                val landlordId = booking?.landlordId
-
-                                if (landlordId == null) {
-                                    snackbarHostState.showSnackbar("Unable to identify landlord for this booking")
-                                    isSubmitting = false
-                                    return@launch
-                                }
-
-                                val success = reviewRepository.submitReview(
-                                    bookingId = bookingId,
-                                    propertyId = booking?.propertyId ?: 0,
-                                    studentId = studentId,
-                                    landlordId = landlordId,
-                                    propertyRating = propertyRating,
-                                    landlordRating = landlordRating,
-                                    comment = comment.ifBlank { null }
-                                )
-
-                                if (success) {
-                                    snackbarHostState.showSnackbar("Review submitted successfully!")
-                                    // Navigate back after a short delay
-                                    kotlinx.coroutines.delay(1000)
-                                    onNavigateBack()
-                                } else {
-                                    snackbarHostState.showSnackbar("Failed to submit review. You may have already reviewed this booking.")
-                                }
-                            } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Error submitting review: ${e.message}")
-                            } finally {
-                                isSubmitting = false
-                            }
-                        }
+                        viewModel.submitReview(bookingId)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSubmitting && propertyRating > 0 && landlordRating > 0
+                    enabled = !uiState.isSubmitting && uiState.propertyRating > 0 && uiState.landlordRating > 0
                 ) {
-                    if (isSubmitting) {
+                    if (uiState.isSubmitting) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Text(if (isSubmitting) "Submitting..." else "Submit Review")
+                    Text(if (uiState.isSubmitting) "Submitting..." else "Submit Review")
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

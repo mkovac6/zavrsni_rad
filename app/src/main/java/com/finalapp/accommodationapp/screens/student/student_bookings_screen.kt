@@ -11,11 +11,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.data.model.Booking
 import com.finalapp.accommodationapp.data.repository.student.BookingRepository
 import com.finalapp.accommodationapp.data.repository.student.StudentRepository
 import com.finalapp.accommodationapp.data.repository.student.ReviewRepository
+import com.finalapp.accommodationapp.ui.viewmodels.student.StudentBookingsViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -27,58 +30,30 @@ fun StudentBookingsScreen(
     onPropertyClick: (Int) -> Unit,
     onHomeClick: () -> Unit,
     onFavoritesClick: () -> Unit,
-    onReviewClick: (Int) -> Unit = {}
+    onReviewClick: (Int) -> Unit = {},
+    viewModel: StudentBookingsViewModel = viewModel {
+        StudentBookingsViewModel(
+            bookingRepository = BookingRepository(),
+            studentRepository = StudentRepository(),
+            reviewRepository = ReviewRepository()
+        )
+    }
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val bookingRepository = remember { BookingRepository() }
-    val studentRepository = remember { StudentRepository() }
-    val reviewRepository = remember { ReviewRepository() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val filteredBookings = viewModel.filteredBookings
     val snackbarHostState = remember { SnackbarHostState() }
-
-    var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var selectedTab by remember { mutableStateOf(0) }
-    var studentId by remember { mutableStateOf(0) }
-
-    var reviewedBookingIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     // Load bookings
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            isLoading = true
-            try {
-                // Get student ID
-                val userId = UserSession.currentUser?.userId ?: 0
-                val studentProfile = studentRepository.getStudentProfile(userId)
-
-                if (studentProfile != null) {
-                    studentId = studentProfile.studentId
-                    bookings = bookingRepository.getStudentBookings(studentProfile.studentId)
-                    // Check which bookings have been reviewed
-                    val completedBookingIds = bookings.filter { it.status.lowercase() == "completed" }.map { it.bookingId }
-                    if (completedBookingIds.isNotEmpty()) {
-                        reviewedBookingIds = completedBookingIds.filter { bookingId ->
-                            reviewRepository.isBookingReviewed(bookingId)
-                        }.toSet()
-                    }
-                } else {
-                    snackbarHostState.showSnackbar("Unable to load student profile")
-                }
-            } catch (e: Exception) {
-                snackbarHostState.showSnackbar("Error loading bookings: ${e.message}")
-            } finally {
-                isLoading = false
-            }
-        }
+        val userId = UserSession.currentUser?.userId ?: 0
+        viewModel.loadBookings(userId)
     }
 
-    // Filter bookings by status
-    val filteredBookings = when (selectedTab) {
-        0 -> bookings // All
-        1 -> bookings.filter { it.status.lowercase() == "pending" }
-        2 -> bookings.filter { it.status.lowercase() == "approved" }
-        3 -> bookings.filter { it.status.lowercase() in listOf("rejected", "cancelled") }
-        4 -> bookings.filter { it.status.lowercase() == "completed" }
-        else -> bookings
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
     }
 
     Scaffold(
@@ -105,7 +80,7 @@ fun StudentBookingsScreen(
                     icon = { Icon(Icons.Filled.DateRange, contentDescription = "Bookings") },
                     label = { Text("Bookings") },
                     selected = true,
-                    onClick = { }
+                    onClick = {}
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Favorite, contentDescription = "Favorites") },
@@ -122,45 +97,45 @@ fun StudentBookingsScreen(
                 .padding(paddingValues)
         ) {
             // Tab Row
-            TabRow(selectedTabIndex = selectedTab) {
+            TabRow(selectedTabIndex = uiState.selectedTab) {
                 Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
+                    selected = uiState.selectedTab == 0,
+                    onClick = { viewModel.selectTab(0) },
                     text = {
-                        Text("All (${bookings.size})")
+                        Text("All (${uiState.bookings.size})")
                     }
                 )
                 Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
+                    selected = uiState.selectedTab == 1,
+                    onClick = { viewModel.selectTab(1) },
                     text = {
-                        Text("Pending (${bookings.filter { it.status.lowercase() == "pending" }.size})")
+                        Text("Pending (${uiState.bookings.filter { it.status.lowercase() == "pending" }.size})")
                     }
                 )
                 Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
+                    selected = uiState.selectedTab == 2,
+                    onClick = { viewModel.selectTab(2) },
                     text = {
-                        Text("Approved (${bookings.filter { it.status.lowercase() == "approved" }.size})")
+                        Text("Approved (${uiState.bookings.filter { it.status.lowercase() == "approved" }.size})")
                     }
                 )
                 Tab(
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
+                    selected = uiState.selectedTab == 3,
+                    onClick = { viewModel.selectTab(3) },
                     text = {
-                        Text("Rejected (${bookings.filter { it.status.lowercase() in listOf("rejected", "cancelled") }.size})")
+                        Text("Rejected (${uiState.bookings.filter { it.status.lowercase() in listOf("rejected", "cancelled") }.size})")
                     }
                 )
                 Tab(
-                    selected = selectedTab == 4,
-                    onClick = { selectedTab = 4 },
+                    selected = uiState.selectedTab == 4,
+                    onClick = { viewModel.selectTab(4) },
                     text = {
-                        Text("Completed (${bookings.filter { it.status.lowercase() == "completed" }.size})")
+                        Text("Completed (${uiState.bookings.filter { it.status.lowercase() == "completed" }.size})")
                     }
                 )
             }
 
-            if (isLoading) {
+            if (uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -189,7 +164,7 @@ fun StudentBookingsScreen(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = when (selectedTab) {
+                            text = when (uiState.selectedTab) {
                                 1 -> "You don't have any pending bookings"
                                 2 -> "You don't have any approved bookings"
                                 3 -> "You don't have any rejected bookings"
@@ -209,31 +184,15 @@ fun StudentBookingsScreen(
                     items(filteredBookings) { booking ->
                         BookingCard(
                             booking = booking,
-                            isReviewed = reviewedBookingIds.contains(booking.bookingId),
-                            onReviewClick = if (booking.status.lowercase() == "completed" && !reviewedBookingIds.contains(booking.bookingId)) {
+                            isReviewed = uiState.reviewedBookingIds.contains(booking.bookingId),
+                            onReviewClick = if (booking.status.lowercase() == "completed" && !uiState.reviewedBookingIds.contains(booking.bookingId)) {
                                 { onReviewClick(booking.bookingId) }
                             } else null,
                             onPropertyClick = { onPropertyClick(booking.propertyId) },
                             onCancelBooking = if (booking.status.lowercase() == "pending") {
                                 {
-                                    coroutineScope.launch {
-                                        val success = bookingRepository.updateBookingStatus(
-                                            booking.bookingId,
-                                            "cancelled"
-                                        )
-                                        if (success) {
-                                            // Reload bookings
-                                            val studentProfile = studentRepository.getStudentProfile(
-                                                UserSession.currentUser?.userId ?: 0
-                                            )
-                                            if (studentProfile != null) {
-                                                bookings = bookingRepository.getStudentBookings(studentProfile.studentId)
-                                            }
-                                            snackbarHostState.showSnackbar("Booking cancelled successfully")
-                                        } else {
-                                            snackbarHostState.showSnackbar("Failed to cancel booking")
-                                        }
-                                    }
+                                    val userId = UserSession.currentUser?.userId ?: 0
+                                    viewModel.cancelBooking(booking.bookingId, userId)
                                 }
                             } else null
                         )

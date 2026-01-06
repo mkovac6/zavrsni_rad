@@ -13,16 +13,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
 import com.finalapp.accommodationapp.data.repository.landlord.LandlordRepository
 import com.finalapp.accommodationapp.data.repository.student.BookingRepository
 import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.UserSession
+import com.finalapp.accommodationapp.data.repository.student.ReviewRepository
+import com.finalapp.accommodationapp.ui.viewmodels.landlord.LandlordHomeViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.finalapp.accommodationapp.data.repository.student.ReviewRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,68 +35,39 @@ fun LandlordHomeScreen(
     onBookingsClick: () -> Unit,
     onProfileClick: () -> Unit,
     onReviewsClick: () -> Unit,
-    onLogout: () -> Unit
-) {
-    val propertyRepository = remember { PropertyRepository() }
-    val landlordRepository = remember { LandlordRepository() }
-    val bookingRepository = remember { BookingRepository() }
-    val reviewRepository = remember { ReviewRepository() }
-
-    var properties by remember { mutableStateOf<List<Property>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var landlordName by remember { mutableStateOf("") }
-    var landlordId by remember { mutableStateOf<Int?>(null) }
-    var pendingBookingsCount by remember { mutableStateOf(0) }
-    var newReviewsCount by remember { mutableStateOf(0) }
-    var selectedTab by remember { mutableStateOf(0) } // 0=Home, 1=Bookings, 2=Profile
-
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    // Dialog states
-    var showWarningDialog by remember { mutableStateOf(false) }
-    var propertyToToggle by remember { mutableStateOf<Property?>(null) }
-
-    // Function to reload properties
-    fun loadProperties() {
-        scope.launch {
-            isLoading = true
-            if (landlordId != null) {
-                properties = propertyRepository.getPropertiesByLandlordId(landlordId!!)
-                pendingBookingsCount = bookingRepository.countPendingBookingsForLandlord(landlordId!!)
-            }
-                newReviewsCount = reviewRepository.getNewReviewsCount(landlordId!!)
-            isLoading = false
-        }
+    onLogout: () -> Unit,
+    viewModel: LandlordHomeViewModel = viewModel {
+        LandlordHomeViewModel(
+            propertyRepository = PropertyRepository(),
+            landlordRepository = LandlordRepository(),
+            bookingRepository = BookingRepository(),
+            reviewRepository = ReviewRepository()
+        )
     }
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // Load landlord's properties and bookings count on first composition
     LaunchedEffect(Unit) {
-        scope.launch {
-            isLoading = true
-
-            // Get landlord ID from current user
-            val userId = UserSession.currentUser?.userId
-            if (userId != null) {
-                val landlordInfo = landlordRepository.getLandlordByUserId(userId)
-                if (landlordInfo != null) {
-                    landlordName = "${landlordInfo.firstName} ${landlordInfo.lastName}"
-                    landlordId = landlordInfo.landlordId
-                    properties = propertyRepository.getPropertiesByLandlordId(landlordInfo.landlordId)
-                    pendingBookingsCount = bookingRepository.countPendingBookingsForLandlord(landlordInfo.landlordId)
-                    newReviewsCount = reviewRepository.getNewReviewsCount(landlordInfo.landlordId)
-                }
-            }
-
-            isLoading = false
+        val userId = UserSession.currentUser?.userId
+        if (userId != null) {
+            viewModel.loadLandlordData(userId)
         }
     }
 
-    // Refresh pending bookings count when returning to home
-    LaunchedEffect(selectedTab) {
-        if (selectedTab == 0 && landlordId != null) {
-            pendingBookingsCount = bookingRepository.countPendingBookingsForLandlord(landlordId!!)
-            newReviewsCount = reviewRepository.getNewReviewsCount(landlordId!!)
+    // Refresh pending bookings count when tab changes
+    LaunchedEffect(uiState.selectedTab) {
+        if (uiState.selectedTab == 0) {
+            viewModel.refreshCounts()
+        }
+    }
+
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
         }
     }
 
@@ -109,7 +82,7 @@ fun LandlordHomeScreen(
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            landlordName.ifEmpty { "Landlord" },
+                            uiState.landlordName.ifEmpty { "Landlord" },
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -129,17 +102,17 @@ fun LandlordHomeScreen(
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
                     label = { Text("Home") },
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 }
+                    selected = uiState.selectedTab == 0,
+                    onClick = { viewModel.selectTab(0) }
                 )
                 NavigationBarItem(
                     icon = {
                         BadgedBox(
                             badge = {
-                                if (pendingBookingsCount > 0) {
+                                if (uiState.pendingBookingsCount > 0) {
                                     Badge {
                                         Text(
-                                            text = pendingBookingsCount.toString(),
+                                            text = uiState.pendingBookingsCount.toString(),
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                     }
@@ -150,9 +123,9 @@ fun LandlordHomeScreen(
                         }
                     },
                     label = { Text("Bookings") },
-                    selected = selectedTab == 1,
+                    selected = uiState.selectedTab == 1,
                     onClick = {
-                        selectedTab = 1
+                        viewModel.selectTab(1)
                         onBookingsClick()
                     }
                 )
@@ -160,10 +133,10 @@ fun LandlordHomeScreen(
                     icon = {
                         BadgedBox(
                             badge = {
-                                if (newReviewsCount > 0) {
+                                if (uiState.newReviewsCount > 0) {
                                     Badge {
                                         Text(
-                                            text = newReviewsCount.toString(),
+                                            text = uiState.newReviewsCount.toString(),
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                     }
@@ -174,16 +147,16 @@ fun LandlordHomeScreen(
                         }
                     },
                     label = { Text("Reviews") },
-                    selected = selectedTab == 2,
+                    selected = uiState.selectedTab == 2,
                     onClick = {
-                        selectedTab = 2
+                        viewModel.selectTab(2)
                         onReviewsClick()
                     }
                 )
             }
         },
         floatingActionButton = {
-            if (properties.isNotEmpty() && selectedTab == 0) {
+            if (uiState.properties.isNotEmpty() && uiState.selectedTab == 0) {
                 FloatingActionButton(
                     onClick = onAddProperty,
                     containerColor = MaterialTheme.colorScheme.primary
@@ -217,7 +190,7 @@ fun LandlordHomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = properties.size.toString(),
+                            text = uiState.properties.size.toString(),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -232,7 +205,7 @@ fun LandlordHomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = properties.count { it.isActive }.toString(),
+                            text = uiState.properties.count { it.isActive }.toString(),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF4CAF50)
@@ -247,10 +220,10 @@ fun LandlordHomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = pendingBookingsCount.toString(),
+                            text = uiState.pendingBookingsCount.toString(),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (pendingBookingsCount > 0)
+                            color = if (uiState.pendingBookingsCount > 0)
                                 MaterialTheme.colorScheme.error
                             else
                                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -277,21 +250,21 @@ fun LandlordHomeScreen(
                     fontWeight = FontWeight.Bold
                 )
 
-                if (pendingBookingsCount > 0) {
+                if (uiState.pendingBookingsCount > 0) {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         )
                     ) {
                         Text(
-                            text = "$pendingBookingsCount new booking${if (pendingBookingsCount > 1) "s" else ""}",
+                            text = "${uiState.pendingBookingsCount} new booking${if (uiState.pendingBookingsCount > 1) "s" else ""}",
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                 }
-                if (newReviewsCount > 0) {
+                if (uiState.newReviewsCount > 0) {
                     Card(
                         onClick = onReviewsClick,
                         colors = CardDefaults.cardColors(
@@ -299,7 +272,7 @@ fun LandlordHomeScreen(
                         )
                     ) {
                         Text(
-                            text = "$newReviewsCount new review${if (newReviewsCount > 1) "s" else ""}",
+                            text = "${uiState.newReviewsCount} new review${if (uiState.newReviewsCount > 1) "s" else ""}",
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -308,14 +281,14 @@ fun LandlordHomeScreen(
                 }
             }
 
-            if (isLoading) {
+            if (uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
                 }
-            } else if (properties.isEmpty()) {
+            } else if (uiState.properties.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -356,35 +329,13 @@ fun LandlordHomeScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(properties) { property ->
+                    items(uiState.properties) { property ->
                         LandlordPropertyCard(
                             property = property,
                             onClick = { onPropertyClick(property.propertyId) },
                             onEditClick = { onEditProperty(property.propertyId) },
                             onToggleStatus = {
-                                // Check if trying to deactivate a property before its availability date
-                                val today = Date()
-                                if (property.isActive && property.availableFrom != null && property.availableFrom.after(today)) {
-                                    // Show warning when DEACTIVATING before availability date
-                                    propertyToToggle = property
-                                    showWarningDialog = true
-                                } else {
-                                    // Toggle directly (activating or deactivating after availability date)
-                                    scope.launch {
-                                        val success = propertyRepository.updatePropertyStatus(
-                                            property.propertyId,
-                                            !property.isActive
-                                        )
-                                        if (success) {
-                                            loadProperties()
-                                            snackbarHostState.showSnackbar(
-                                                if (property.isActive) "Property deactivated" else "Property activated"
-                                            )
-                                        } else {
-                                            snackbarHostState.showSnackbar("Failed to update property status")
-                                        }
-                                    }
-                                }
+                                viewModel.togglePropertyStatus(property)
                             }
                         )
                     }
@@ -394,39 +345,23 @@ fun LandlordHomeScreen(
     }
 
     // Warning Dialog
-    if (showWarningDialog && propertyToToggle != null) {
+    if (uiState.showWarningDialog && uiState.propertyToToggle != null) {
         AlertDialog(
             onDismissRequest = {
-                showWarningDialog = false
-                propertyToToggle = null
+                viewModel.dismissWarningDialog()
             },
             title = { Text("Warning") },
             text = {
                 val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                 Text(
-                    "This property is scheduled to be available on ${dateFormat.format(propertyToToggle!!.availableFrom)}. " +
+                    "This property is scheduled to be available on ${dateFormat.format(uiState.propertyToToggle!!.availableFrom)}. " +
                             "Are you sure you want to deactivate it before this date?"
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        scope.launch {
-                            propertyToToggle?.let { property ->
-                                val success = propertyRepository.updatePropertyStatus(
-                                    property.propertyId,
-                                    false
-                                )
-                                if (success) {
-                                    loadProperties()
-                                    snackbarHostState.showSnackbar("Property deactivated")
-                                } else {
-                                    snackbarHostState.showSnackbar("Failed to update property status")
-                                }
-                            }
-                            showWarningDialog = false
-                            propertyToToggle = null
-                        }
+                        viewModel.confirmToggle()
                     }
                 ) {
                     Text("Confirm", color = MaterialTheme.colorScheme.error)
@@ -435,8 +370,7 @@ fun LandlordHomeScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        showWarningDialog = false
-                        propertyToToggle = null
+                        viewModel.dismissWarningDialog()
                     }
                 ) {
                     Text("Cancel")

@@ -13,11 +13,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.repository.PropertyRepository
 import com.finalapp.accommodationapp.data.model.Property
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.screens.components.PropertyThumbnail
+import com.finalapp.accommodationapp.ui.viewmodels.student.StudentHomeViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -29,30 +31,15 @@ fun HomeScreen(
     onProfileClick: () -> Unit,
     onFavoritesClick: () -> Unit,
     onMapClick: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    viewModel: StudentHomeViewModel = viewModel {
+        StudentHomeViewModel(
+            propertyRepository = PropertyRepository()
+        )
+    }
 ) {
-    val propertyRepository = remember { PropertyRepository() }
-    var properties by remember { mutableStateOf<List<Property>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var searchQuery by remember { mutableStateOf("") }
-    val scope = rememberCoroutineScope()
-
-    // Load properties on first composition
-    LaunchedEffect(Unit) {
-        scope.launch {
-            isLoading = true
-            properties = propertyRepository.getAllProperties()
-            isLoading = false
-        }
-    }
-
-    // Filter properties based on search
-    val filteredProperties = properties.filter { property ->
-        searchQuery.isEmpty() ||
-                property.title.contains(searchQuery, ignoreCase = true) ||
-                property.city.contains(searchQuery, ignoreCase = true) ||
-                property.address.contains(searchQuery, ignoreCase = true)
-    }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val filteredProperties = viewModel.filteredProperties
 
     Scaffold(
         topBar = {
@@ -109,8 +96,8 @@ fun HomeScreen(
         ) {
             // Search Bar
             OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+                value = uiState.searchQuery,
+                onValueChange = { viewModel.updateSearchQuery(it) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
@@ -121,7 +108,7 @@ fun HomeScreen(
                 singleLine = true
             )
 
-            if (isLoading) {
+            if (uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -149,7 +136,7 @@ fun HomeScreen(
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
-                        if (searchQuery.isNotEmpty()) {
+                        if (uiState.searchQuery.isNotEmpty()) {
                             Text(
                                 "Try adjusting your search",
                                 style = MaterialTheme.typography.bodyMedium,

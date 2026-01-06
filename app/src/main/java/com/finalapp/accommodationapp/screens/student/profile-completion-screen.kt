@@ -11,8 +11,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.data.repository.student.StudentRepository
+import com.finalapp.accommodationapp.ui.viewmodels.student.ProfileCompletionViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -20,23 +23,31 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProfileCompletionScreen(
     universityId: Int,
-    onProfileComplete: () -> Unit
+    onProfileComplete: () -> Unit,
+    viewModel: ProfileCompletionViewModel = viewModel {
+        ProfileCompletionViewModel(
+            studentRepository = StudentRepository()
+        )
+    }
 ) {
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var studentNumber by remember { mutableStateOf("") }
-    var yearOfStudy by remember { mutableStateOf("") }
-    var program by remember { mutableStateOf("") }
-    var budgetMin by remember { mutableStateOf("") }
-    var budgetMax by remember { mutableStateOf("") }
-
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    val coroutineScope = rememberCoroutineScope()
-    val studentRepository = remember { StudentRepository() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Handle snackbar messages
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.snackbarShown()
+        }
+    }
+
+    // Handle navigation on profile complete
+    LaunchedEffect(uiState.profileComplete) {
+        if (uiState.profileComplete) {
+            onProfileComplete()
+            viewModel.navigationHandled()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -66,40 +77,40 @@ fun ProfileCompletionScreen(
 
             // Required fields
             OutlinedTextField(
-                value = firstName,
-                onValueChange = { firstName = it },
+                value = uiState.formState.firstName,
+                onValueChange = { viewModel.updateFirstName(it) },
                 label = { Text("First Name *") },
                 modifier = Modifier.fillMaxWidth(),
-                isError = errorMessage != null && firstName.isBlank()
+                isError = uiState.errorMessage != null && uiState.formState.firstName.isBlank()
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = lastName,
-                onValueChange = { lastName = it },
+                value = uiState.formState.lastName,
+                onValueChange = { viewModel.updateLastName(it) },
                 label = { Text("Last Name *") },
                 modifier = Modifier.fillMaxWidth(),
-                isError = errorMessage != null && lastName.isBlank()
+                isError = uiState.errorMessage != null && uiState.formState.lastName.isBlank()
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = phone,
-                onValueChange = { phone = it },
+                value = uiState.formState.phone,
+                onValueChange = { viewModel.updatePhone(it) },
                 label = { Text("Phone Number *") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                isError = errorMessage != null && phone.isBlank()
+                isError = uiState.errorMessage != null && uiState.formState.phone.isBlank()
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // Optional fields
             OutlinedTextField(
-                value = studentNumber,
-                onValueChange = { studentNumber = it },
+                value = uiState.formState.studentNumber,
+                onValueChange = { viewModel.updateStudentNumber(it) },
                 label = { Text("Student ID (Optional)") },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -107,8 +118,8 @@ fun ProfileCompletionScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = yearOfStudy,
-                onValueChange = { yearOfStudy = it.filter { char -> char.isDigit() } },
+                value = uiState.formState.yearOfStudy,
+                onValueChange = { viewModel.updateYearOfStudy(it) },
                 label = { Text("Year of Study (Optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -117,8 +128,8 @@ fun ProfileCompletionScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = program,
-                onValueChange = { program = it },
+                value = uiState.formState.program,
+                onValueChange = { viewModel.updateProgram(it) },
                 label = { Text("Program/Major (Optional)") },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -137,23 +148,23 @@ fun ProfileCompletionScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 OutlinedTextField(
-                    value = budgetMin,
-                    onValueChange = { budgetMin = it.filter { char -> char.isDigit() || char == '.' } },
+                    value = uiState.formState.budgetMin,
+                    onValueChange = { viewModel.updateBudgetMin(it) },
                     label = { Text("Min") },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
 
                 OutlinedTextField(
-                    value = budgetMax,
-                    onValueChange = { budgetMax = it.filter { char -> char.isDigit() || char == '.' } },
+                    value = uiState.formState.budgetMax,
+                    onValueChange = { viewModel.updateBudgetMax(it) },
                     label = { Text("Max") },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
             }
 
-            if (errorMessage != null) {
+            if (uiState.errorMessage != null) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -162,7 +173,7 @@ fun ProfileCompletionScreen(
                     )
                 ) {
                     Text(
-                        text = errorMessage!!,
+                        text = uiState.errorMessage!!,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         fontSize = 14.sp,
                         modifier = Modifier.padding(12.dp)
@@ -174,61 +185,13 @@ fun ProfileCompletionScreen(
 
             Button(
                 onClick = {
-                    when {
-                        firstName.isBlank() || lastName.isBlank() || phone.isBlank() -> {
-                            errorMessage = "Please fill in all required fields (*)"
-                        }
-                        budgetMin.isNotEmpty() && budgetMax.isNotEmpty() &&
-                                budgetMin.toDoubleOrNull() != null && budgetMax.toDoubleOrNull() != null &&
-                                budgetMin.toDouble() > budgetMax.toDouble() -> {
-                            errorMessage = "Minimum budget cannot be greater than maximum"
-                        }
-                        else -> {
-                            coroutineScope.launch {
-                                isLoading = true
-                                errorMessage = null
-
-                                val userId = UserSession.getUserId()
-                                if (userId == 0) {
-                                    errorMessage = "User session expired. Please login again."
-                                    isLoading = false
-                                    return@launch
-                                }
-
-                                val success = studentRepository.createStudentProfile(
-                                    userId = userId,
-                                    universityId = universityId,
-                                    firstName = firstName.trim(),
-                                    lastName = lastName.trim(),
-                                    phone = phone.trim(),
-                                    studentNumber = studentNumber.trim().ifEmpty { null },
-                                    yearOfStudy = yearOfStudy.toIntOrNull(),
-                                    program = program.trim().ifEmpty { null },
-                                    preferredMoveInDate = null, // Can add date picker later
-                                    budgetMin = budgetMin.toDoubleOrNull(),
-                                    budgetMax = budgetMax.toDoubleOrNull()
-                                )
-
-                                if (success) {
-                                    snackbarHostState.showSnackbar(
-                                        message = "Profile completed successfully!",
-                                        duration = SnackbarDuration.Short
-                                    )
-                                    delay(1000)
-                                    onProfileComplete()
-                                } else {
-                                    errorMessage = "Failed to save profile. Please try again."
-                                }
-
-                                isLoading = false
-                            }
-                        }
-                    }
+                    val userId = UserSession.getUserId()
+                    viewModel.completeProfile(userId, universityId)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                enabled = !uiState.isLoading
             ) {
-                if (isLoading) {
+                if (uiState.isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         color = MaterialTheme.colorScheme.onPrimary,
