@@ -15,6 +15,7 @@ data class Booking(
     val updatedAt: Date? = null,
     // Additional fields for display
     val propertyTitle: String? = null,
+    val landlordId: Int? = null,
     val propertyAddress: String? = null,
     val landlordName: String? = null,
     val studentName: String? = null

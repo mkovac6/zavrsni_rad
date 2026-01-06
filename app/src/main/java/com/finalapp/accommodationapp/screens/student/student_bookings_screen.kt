@@ -15,6 +15,7 @@ import com.finalapp.accommodationapp.data.UserSession
 import com.finalapp.accommodationapp.data.model.Booking
 import com.finalapp.accommodationapp.data.repository.student.BookingRepository
 import com.finalapp.accommodationapp.data.repository.student.StudentRepository
+import com.finalapp.accommodationapp.data.repository.student.ReviewRepository
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -25,11 +26,13 @@ fun StudentBookingsScreen(
     onNavigateBack: () -> Unit,
     onPropertyClick: (Int) -> Unit,
     onHomeClick: () -> Unit,
-    onFavoritesClick: () -> Unit
+    onFavoritesClick: () -> Unit,
+    onReviewClick: (Int) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val bookingRepository = remember { BookingRepository() }
     val studentRepository = remember { StudentRepository() }
+    val reviewRepository = remember { ReviewRepository() }
     val snackbarHostState = remember { SnackbarHostState() }
 
     var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
@@ -37,6 +40,7 @@ fun StudentBookingsScreen(
     var selectedTab by remember { mutableStateOf(0) }
     var studentId by remember { mutableStateOf(0) }
 
+    var reviewedBookingIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     // Load bookings
     LaunchedEffect(Unit) {
         coroutineScope.launch {
@@ -49,6 +53,13 @@ fun StudentBookingsScreen(
                 if (studentProfile != null) {
                     studentId = studentProfile.studentId
                     bookings = bookingRepository.getStudentBookings(studentProfile.studentId)
+                    // Check which bookings have been reviewed
+                    val completedBookingIds = bookings.filter { it.status.lowercase() == "completed" }.map { it.bookingId }
+                    if (completedBookingIds.isNotEmpty()) {
+                        reviewedBookingIds = completedBookingIds.filter { bookingId ->
+                            reviewRepository.isBookingReviewed(bookingId)
+                        }.toSet()
+                    }
                 } else {
                     snackbarHostState.showSnackbar("Unable to load student profile")
                 }
@@ -66,6 +77,7 @@ fun StudentBookingsScreen(
         1 -> bookings.filter { it.status.lowercase() == "pending" }
         2 -> bookings.filter { it.status.lowercase() == "approved" }
         3 -> bookings.filter { it.status.lowercase() in listOf("rejected", "cancelled") }
+        4 -> bookings.filter { it.status.lowercase() == "completed" }
         else -> bookings
     }
 
@@ -139,6 +151,13 @@ fun StudentBookingsScreen(
                         Text("Rejected (${bookings.filter { it.status.lowercase() in listOf("rejected", "cancelled") }.size})")
                     }
                 )
+                Tab(
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
+                    text = {
+                        Text("Completed (${bookings.filter { it.status.lowercase() == "completed" }.size})")
+                    }
+                )
             }
 
             if (isLoading) {
@@ -190,6 +209,10 @@ fun StudentBookingsScreen(
                     items(filteredBookings) { booking ->
                         BookingCard(
                             booking = booking,
+                            isReviewed = reviewedBookingIds.contains(booking.bookingId),
+                            onReviewClick = if (booking.status.lowercase() == "completed" && !reviewedBookingIds.contains(booking.bookingId)) {
+                                { onReviewClick(booking.bookingId) }
+                            } else null,
                             onPropertyClick = { onPropertyClick(booking.propertyId) },
                             onCancelBooking = if (booking.status.lowercase() == "pending") {
                                 {
@@ -226,7 +249,9 @@ fun StudentBookingsScreen(
 fun BookingCard(
     booking: Booking,
     onPropertyClick: () -> Unit,
-    onCancelBooking: (() -> Unit)? = null
+    onCancelBooking: (() -> Unit)? = null,
+    isReviewed: Boolean = false,
+    onReviewClick: (() -> Unit)? = null
 ) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
@@ -362,6 +387,22 @@ fun BookingCard(
                     Text("Cancel Booking")
                 }
             }
+           // Leave Review button for completed bookings
+            if (onReviewClick != null && booking.status.lowercase() == "completed" && !isReviewed) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = onReviewClick,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Leave a Review")
+                }
+            }
         }
     }
 }
@@ -388,6 +429,11 @@ fun StatusBadge(status: String) {
             MaterialTheme.colorScheme.surfaceVariant,
             MaterialTheme.colorScheme.onSurfaceVariant,
             Icons.Filled.Clear
+        )
+        "completed" -> Triple(
+            MaterialTheme.colorScheme.secondaryContainer,
+            MaterialTheme.colorScheme.onSecondaryContainer,
+            Icons.Filled.CheckCircle
         )
         else -> Triple(
             MaterialTheme.colorScheme.secondaryContainer,

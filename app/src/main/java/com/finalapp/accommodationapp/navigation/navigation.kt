@@ -30,6 +30,7 @@ import com.finalapp.accommodationapp.screens.student.MapScreen
 import com.finalapp.accommodationapp.screens.student.ProfileCompletionScreen
 import com.finalapp.accommodationapp.screens.student.PropertyDetailScreen
 import com.finalapp.accommodationapp.screens.student.StudentBookingsScreen
+import com.finalapp.accommodationapp.screens.student.StudentReviewScreen
 import com.finalapp.accommodationapp.screens.student.StudentEditProfileScreen
 import com.finalapp.accommodationapp.screens.student.StudentFavoritesScreen
 import com.finalapp.accommodationapp.screens.student.StudentProfileScreen
@@ -332,6 +333,10 @@ fun AppNavigation(
                         popUpTo(Screen.StudentBookings.route) { inclusive = true }
                     }
                 }
+                ,
+                onReviewClick = { bookingId ->
+                    navController.navigate("${Screen.StudentReview.route}/$bookingId")
+                }
             )
         }
 
@@ -356,6 +361,15 @@ fun AppNavigation(
             )
         }
 
+        composable("${Screen.StudentReview.route}/{bookingId}") { backStackEntry ->
+            val bookingId = backStackEntry.arguments?.getString("bookingId")?.toIntOrNull() ?: 0
+            StudentReviewScreen(
+                bookingId = bookingId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
         composable(Screen.StudentMap.route) {
             MapScreen(
                 onPropertyClick = { propertyId ->
@@ -488,6 +502,7 @@ sealed class Screen(val route: String) {
     object StudentProfile : Screen("student_profile")
     object StudentBookings : Screen("student_bookings")
     object StudentFavorites : Screen("student_favorites")
+    object StudentReview : Screen("student_review")
     object StudentMap : Screen("student_map")
     object PropertyLocationMap : Screen("property_location_map")
 

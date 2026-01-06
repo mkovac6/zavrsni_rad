@@ -22,6 +22,7 @@ import com.finalapp.accommodationapp.data.UserSession
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.finalapp.accommodationapp.data.repository.student.ReviewRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,12 +37,14 @@ fun LandlordHomeScreen(
     val propertyRepository = remember { PropertyRepository() }
     val landlordRepository = remember { LandlordRepository() }
     val bookingRepository = remember { BookingRepository() }
+    val reviewRepository = remember { ReviewRepository() }
 
     var properties by remember { mutableStateOf<List<Property>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var landlordName by remember { mutableStateOf("") }
     var landlordId by remember { mutableStateOf<Int?>(null) }
     var pendingBookingsCount by remember { mutableStateOf(0) }
+    var newReviewsCount by remember { mutableStateOf(0) }
     var selectedTab by remember { mutableStateOf(0) } // 0=Home, 1=Bookings, 2=Profile
 
     val scope = rememberCoroutineScope()
@@ -59,6 +62,7 @@ fun LandlordHomeScreen(
                 properties = propertyRepository.getPropertiesByLandlordId(landlordId!!)
                 pendingBookingsCount = bookingRepository.countPendingBookingsForLandlord(landlordId!!)
             }
+                newReviewsCount = reviewRepository.getNewReviewsCount(landlordId!!)
             isLoading = false
         }
     }
@@ -77,6 +81,7 @@ fun LandlordHomeScreen(
                     landlordId = landlordInfo.landlordId
                     properties = propertyRepository.getPropertiesByLandlordId(landlordInfo.landlordId)
                     pendingBookingsCount = bookingRepository.countPendingBookingsForLandlord(landlordInfo.landlordId)
+                    newReviewsCount = reviewRepository.getNewReviewsCount(landlordInfo.landlordId)
                 }
             }
 
@@ -88,6 +93,7 @@ fun LandlordHomeScreen(
     LaunchedEffect(selectedTab) {
         if (selectedTab == 0 && landlordId != null) {
             pendingBookingsCount = bookingRepository.countPendingBookingsForLandlord(landlordId!!)
+            newReviewsCount = reviewRepository.getNewReviewsCount(landlordId!!)
         }
     }
 
@@ -258,6 +264,20 @@ fun LandlordHomeScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
+               if (newReviewsCount > 0) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Text(
+                            text = "$newReviewsCount new review${if (newReviewsCount > 1) "s" else ""}",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
                     }
                 }
             }

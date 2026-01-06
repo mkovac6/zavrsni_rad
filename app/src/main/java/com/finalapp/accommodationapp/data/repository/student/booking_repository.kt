@@ -115,6 +115,7 @@ class BookingRepository {
                         } catch (e: Exception) { null }
                     },
                     propertyTitle = property?.title,
+                    landlordId = property?.landlord_id,
                     propertyAddress = property?.address,
                     landlordName = "" // We'll skip fetching landlord names for now to keep it simple
                 )
@@ -281,6 +282,50 @@ class BookingRepository {
                 false
             }
         }
+    /**
+     * Auto-complete bookings whose end date has passed
+     * Should be called when the app starts or user logs in
+     */
+    suspend fun autoCompleteExpiredBookings(): Int = withContext(Dispatchers.IO) {
+        try {
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+            // Get all approved bookings whose end date has passed
+            val expiredBookings = supabase.from("bookings")
+                .select {
+                    filter {
+                        eq("status", "approved")
+                        lt("end_date", today)
+                    }
+                }
+                .decodeList<BookingDto>()
+
+            if (expiredBookings.isEmpty()) {
+                return@withContext 0
+            }
+
+            // Update each to completed status
+            expiredBookings.forEach { booking ->
+                val updateData = buildJsonObject {
+                    put("status", "completed")
+                }
+
+                supabase.from("bookings")
+                    .update(updateData) {
+                        filter {
+                            eq("booking_id", booking.booking_id)
+                        }
+                    }
+            }
+
+            Log.d(TAG, "Auto-completed ${expiredBookings.size} expired bookings")
+            expiredBookings.size
+        } catch (e: Exception) {
+            Log.e(TAG, "Error auto-completing bookings: ${e.message}")
+            0
+        }
+    }
+
 }
 
 // DTOs for Supabase
@@ -337,4 +382,17 @@ data class BookingDateDto(
     val start_date: String? = null,
     val end_date: String? = null,
     val status: String? = null
+)
+@Serializable
+data class BookingDto(
+    val booking_id: Int,
+    val property_id: Int,
+    val student_id: Int,
+    val start_date: String? = null,
+    val end_date: String? = null,
+    val status: String,
+    val total_price: Double? = null,
+    val message_to_landlord: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null
 )
