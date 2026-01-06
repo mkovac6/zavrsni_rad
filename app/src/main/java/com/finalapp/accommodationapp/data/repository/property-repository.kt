@@ -2,6 +2,7 @@ package com.finalapp.accommodationapp.data.repository
 
 import android.util.Log
 import com.finalapp.accommodationapp.data.SupabaseClient
+import com.finalapp.accommodationapp.BuildConfig
 import com.finalapp.accommodationapp.data.model.Property
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
@@ -225,7 +226,7 @@ class PropertyRepository {
                 val encodedAddress = URLEncoder.encode(fullAddress, "UTF-8")
 
                 // Your API key
-                val apiKey = "AIzaSyDR8rQvnIoGF7igmA4C_P1dlFnD6lUhveE"
+                val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY
                 val url = "https://maps.googleapis.com/maps/api/geocode/json?address=$encodedAddress&key=$apiKey"
 
                 // Make the API call

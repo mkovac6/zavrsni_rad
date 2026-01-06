@@ -237,30 +237,6 @@ fun AppNavigation(
             )
         }
 
-        composable(Screen.LandlordHome.route) {
-            LandlordHomeScreen(
-                onPropertyClick = { propertyId ->
-                    navController.navigate("${Screen.PropertyDetail.route}/$propertyId")
-                },
-                onAddProperty = {
-                    navController.navigate(Screen.LandlordAddProperty.route)
-                },
-                onEditProperty = { propertyId ->
-                    navController.navigate("${Screen.LandlordEditProperty.route}/$propertyId")
-                },
-                onBookingsClick = {
-                    navController.navigate(Screen.LandlordBookings.route)
-                },
-                onProfileClick = {
-
-                },
-                onLogout = {
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                }
-            )
-        }
 
         composable(Screen.LandlordAddProperty.route) {
             LandlordAddPropertyScreen(

@@ -9,7 +9,8 @@
       "Bash(\"/c/Program Files/Java/jdk-17/bin/java.exe\" -version)",
       "Bash(./gradlew:*)",
       "Bash(echo:*)",
-      "Bash(adb logcat:*)"
+      "Bash(adb logcat:*)",
+      "Bash(cat:*)"
     ]
   }
 }
